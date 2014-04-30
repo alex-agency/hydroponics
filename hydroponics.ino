@@ -16,19 +16,19 @@
 // Debug info
 #define DEBUG   true
 
-// Declare SPI bus pins
+/*// Declare SPI bus pins
 #define CE_PIN  9
 #define CS_PIN  10
 // Set up nRF24L01 radio
-//RF24 radio(CE_PIN, CS_PIN);
+RF24 radio(CE_PIN, CS_PIN);
 // Set up network
-//Mesh mesh(radio);
+Mesh mesh(radio);
 // Declare radio channel 0-127
 const uint8_t channel = 76;
 // Declare unique node id
 const uint16_t node_id = 333;
 // Declare base id, base always has 00 id
-const uint16_t base_id = 00;
+const uint16_t base_id = 00;*/
 
 // Declare DHT11 sensor digital pin
 #define DHT11PIN  3
@@ -40,11 +40,11 @@ const uint16_t base_id = 00;
 #define CDN  "CDN" // days after 2000-01-01
 #define TIME  "TIME" // minutes after 00:00
 
-// Set up Speaker digital pin
-//Melody melody(4);
+/*// Set up Speaker digital pin
+Melody melody(4);
 // Declare interval for play melody
-//const uint16_t alarm_interval = 3600; // seconds
-//uint32_t last_time_alarm;
+const uint16_t alarm_interval = 3600; // seconds
+uint32_t last_time_alarm;*/
 
 // Declare state map
 struct comparator {
@@ -54,8 +54,8 @@ struct comparator {
 };
 SimpleMap<const char*, int, 9, comparator> states;
 
-// Declare delay manager in ms
-timer_t timer(10000);
+// Declare delay manager
+timer_t timer(10*RTC.second);
 
 //
 // Setup
@@ -66,16 +66,13 @@ void setup()
   Serial.begin(57600);
   printf_begin();
 
-  // initialize radio
-  //radio.begin();
+  /*// initialize radio
+  radio.begin();
   // initialize network
-  //mesh.begin(channel, node_id);
+  mesh.begin(channel, node_id);*/
 
   // Shift NV-RAM address 0x08 for RTC
   RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
-  
-  // Device welcome melody
-  //melody.play(5); // R2D2
   
   // Set Clock
   // 365*13+30*11+23=4745+330+23=5098
@@ -223,11 +220,6 @@ void check() {
 
 void alarm(int mode) {
   //melody.beep(mode);	  	
-  
-  // sleeping time
-  if( RTC.dow == 0 || RTC.dow == 6 || RTC.hour < 11 || RTC.hour > 19 ) {
-    return;
-  }
 
   //int duration = states[TIME] - last_time_alarm;
   // do alarm each time interval
