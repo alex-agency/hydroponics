@@ -5,11 +5,13 @@
 //#include "RF24.h"
 //#include "Mesh.h"
 #include "dht11.h"
+#include "NewPing.h"
 #include "SimpleMap.h"
 #include "timer.h"
 #include "button.h"
 #include <Wire.h>
 #include "DS1307new.h"
+#include "BH1750.h"
 //#include "melody.h"
 //#include "LowPower.h"
 
@@ -31,14 +33,27 @@ const uint16_t node_id = 333;
 const uint16_t base_id = 00;*/
 
 // Declare DHT11 sensor digital pin
-#define DHT11PIN  3
+#define DHT11_PIN  3
 // Declare state map keys
 #define HUMIDITY  "humidity"
 #define TEMPERATURE  "temperature"
 
+// Declare HC-SR04 sensor digital pins
+#define TRIG_PIN  A0
+#define ECHO_PIN  A1
+// Declare maximum distance to ping in centimeters
+const uint16_t max_distance = 10;
+// Declare state map key
+#define WATER  "water"
+
 // Declare state map keys
 #define CDN  "CDN" // days after 2000-01-01
 #define TIME  "TIME" // minutes after 00:00
+
+// Declare BH1750 sensor
+BH1750 lightMeter;
+// Declare state map key
+#define LUX  "LUX"
 
 /*// Set up Speaker digital pin
 Melody melody(4);
@@ -143,7 +158,7 @@ void loop()
 
 bool read_DHT11() {
   dht11 DHT11;
-  int state = DHT11.read(DHT11PIN);
+  int state = DHT11.read(DHT11_PIN);
   switch (state) {
     case DHTLIB_OK:
       states[HUMIDITY] = DHT11.humidity;
@@ -214,6 +229,21 @@ void check() {
   if( states[HUMIDITY] < 35 && states[TEMPERATURE] > 25 ) {
     printf_P(PSTR("CHECK: WARNING: Humidity too low: %d!\n\r"), states[HUMIDITY]);
   }
+
+
+  //delay(50);                      // Wait 50ms between pings (about 20 pings/sec). 29ms should be the shortest delay between pings.
+  //unsigned int uS = sonar.ping(); // Send ping, get ping time in microseconds (uS).
+  //Serial.print("Ping: ");
+  //Serial.print(uS / US_ROUNDTRIP_CM); // Convert ping time to distance in cm and print result (0 = outside set distance range)
+  //Serial.println("cm");
+  // sonar.ping_cm();
+
+
+  //  uint16_t lux = lightMeter.readLightLevel();
+  //Serial.print("Light: ");
+  //Serial.print(lux);
+  //Serial.println(" lx");
+
 }
 
 /****************************************************************************/
