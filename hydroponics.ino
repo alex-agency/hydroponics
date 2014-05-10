@@ -1,65 +1,74 @@
 // Import libraries
-#include <SPI.h>
+#include <Wire.h>
+#include "LiquidCrystal_I2C.h"
+#include "OneWire.h"
+#include "DallasTemperature.h"
 #include "printf.h"
-//#include "nRF24L01.h"
-//#include "RF24.h"
-//#include "Mesh.h"
 #include "dht11.h"
-#include "NewPing.h"
 #include "SimpleMap.h"
 #include "timer.h"
-#include "button.h"
-#include <Wire.h>
 #include "DS1307new.h"
 #include "BH1750.h"
-//#include "melody.h"
-//#include "LowPower.h"
+#include "SeeeduinoRelay.h"
+#include "EEPROMex.h"
+#include "OneButton.h"
 
 // Debug info
 #define DEBUG   true
 
-/*// Declare SPI bus pins
-#define CE_PIN  9
-#define CS_PIN  10
-// Set up nRF24L01 radio
-RF24 radio(CE_PIN, CS_PIN);
-// Set up network
-Mesh mesh(radio);
-// Declare radio channel 0-127
-const uint8_t channel = 76;
-// Declare unique node id
-const uint16_t node_id = 333;
-// Declare base id, base always has 00 id
-const uint16_t base_id = 00;*/
-
 // Declare DHT11 sensor digital pin
-#define DHT11_PIN  3
-// Declare state map keys
+#define DHT11PIN  3
+// Declare DHT11 sensor state map keys
 #define HUMIDITY  "humidity"
-#define TEMPERATURE  "temperature"
+#define TEMPER_OUT  "temper out"
 
-// Declare HC-SR04 sensor digital pins
-#define TRIG_PIN  A0
-#define ECHO_PIN  A1
-// Declare maximum distance to ping in centimeters
-const uint16_t max_distance = 10;
-// Declare state map key
-#define WATER  "water"
+// Declare data wire digital pin
+#define ONE_WIRE_BUS  2
+// Setup a oneWire instance to communicate with any OneWire devices
+OneWire oneWire(ONE_WIRE_BUS);
+// Pass our oneWire reference to Dallas Temperature.
+DallasTemperature dallas(&oneWire);
+// Declare DS18B20 sensor state map key
+#define TEMPER_IN  "temper in"
 
-// Declare state map keys
-#define CDN  "CDN" // days after 2000-01-01
-#define TIME  "TIME" // minutes after 00:00
+// Declare liquid sensor state map keys
+#define LOW_SUBSTRAT  "low substrat"
+#define DELIVERED  "delivered"
+#define LOW_WATER  "low water"
+
+// Declare RTC state map keys
+#define CDN  "cdn" // days after 2000-01-01
+#define DTIME  "dtime" // minutes after 00:00
 
 // Declare BH1750 sensor
 BH1750 lightMeter;
-// Declare state map key
-#define LUX  "LUX"
+// Declare BH1750 sensor state map key
+#define LIGHT  "light"
 
-/*// Set up Speaker digital pin
-Melody melody(4);
-// Declare interval for play melody
-const uint16_t alarm_interval = 3600; // seconds
-uint32_t last_time_alarm;*/
+// Declare Relays pins
+#define RELAY1PIN  4
+#define RELAY2PIN  5
+//#define RELAY2PIN  6
+#define RELAY4PIN  7
+// Declare Relays
+SeeeduinoRelay relay1 = SeeeduinoRelay(1,LOW); 
+SeeeduinoRelay relay2 = SeeeduinoRelay(2,LOW);
+//SeeeduinoRelay relay3 = SeeeduinoRelay(3,LOW); 
+SeeeduinoRelay relay4 = SeeeduinoRelay(4,LOW);
+// Declare Relays keys
+#define PUMP_1  "pump-1"
+#define PUMP_2  "pump-2"
+//#define PUMP_3  "pump-3"
+#define LAMP  "lamp"
+
+// Declare buttons and its pins 
+OneButton buttonMenu(A2, true);
+OneButton buttonNext(A3, true);
+
+// Declare LCD1609
+// Set the pins on the I2C chip used for LCD connections: 
+//                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
+LiquidCrystal_I2C lcd(0x20, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 // Declare state map
 struct comparator {
@@ -67,10 +76,26 @@ struct comparator {
     return strcmp(str1, str2) == 0;
   }
 };
-SimpleMap<const char*, int, 9, comparator> states;
+SimpleMap<const char*, int, 12, comparator> states;
 
-// Declare delay manager
-timer_t timer(10*RTC.second);
+// Declare EEPROM values
+bool eeprom_ok = true;
+int settingsAdress = 0;
+// where to store config data
+#define memoryBase 32
+// ID of the settings block
+#define SETTINGS_ID  "001"
+// Declare settings structure
+struct SettingsStruct {
+  char id[4];
+  int a;
+} settings = { 
+  SETTINGS_ID,
+  1
+};
+
+// Declare delay managers, ms
+timer_t check_timer(5000);
 
 //
 // Setup
@@ -81,251 +106,266 @@ void setup()
   Serial.begin(57600);
   printf_begin();
 
-  /*// initialize radio
-  radio.begin();
-  // initialize network
-  mesh.begin(channel, node_id);*/
+  // Start up Dallas Temperature library
+  dallas.begin();
 
+  // Configure EEPROM
+  EEPROM.setMemPool(memoryBase, EEPROMSizeNano);
+  settingsAdress = EEPROM.getAddress(sizeof(SettingsStruct)); 
+  eeprom_ok = loadSettings();
+
+  // Configure RTC
   // Shift NV-RAM address 0x08 for RTC
-  RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
-  
+  //RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
   // Set Clock
-  // 365*13+30*11+23=4745+330+23=5098
-  //set_time(5075, 1407);
+  //set_RTC(get_cdn(2014, 5, 9), get_dtime(11, 0));
+
+  // Configure buttons
+  buttonMenu.attachClick(buttonMenuClickEvent);
+  buttonNext.attachClick(buttonNextClickEvent);
+  buttonMenu.attachDoubleClick(buttonMenuDoubleClickEvent);
+  buttonNext.attachDoubleClick(buttonNextDoubleClickEvent);
+  buttonMenu.attachLongPressStart(buttonMenuLongPressEvent);
+  buttonNext.attachLongPressStart(buttonNextLongPressEvent);
+
+  // Configure LCD1609
+  // Initialize the lcd for 16 chars 2 lines and turn on backlight
+  lcd.begin(16, 2);
+  lcdShowHomeScreen();
 }
 
 //
 // Loop
 //
 void loop()
-{  
-  if( timer ) { 
-	// sleeping
-    /*if(DEBUG) printf("SLEEP: Info: Go to Sleep...\n\r");
-    Serial.flush();
-    // set all pin to low with pullup.
-    for(int i=1; i<=21; i++) {
-      pinMode(i, INPUT_PULLUP);
-      digitalWrite(i, LOW);
-    }
-    // Enter power down state for 8*22 sec with ADC and BOD module disabled
-    LowPower.powerDown(SLEEP_8S, 22, ADC_OFF, BOD_OFF); 
-    if(DEBUG) printf("SLEEP: Info: WakeUp.\n\r");*/
-
-    // read sensors
+{
+  if( check_timer ) {
+    // read modules
     read_DHT11();
-    read_time();
+    read_DS18B20();
+    read_BH1750();
+    read_RTC();
+    read_relays();
 
     // check values
     check();
   }
 
-  // check button
-  handle_button();
+  // update buttons
+  buttonMenu.tick();
+  buttonNext.tick();
 
-  // update melody
-  //melody.update();
-
-  // send values to base
-  /*if( mesh.ready() && timer ) {      
-    // send DHT11 sensor values
-    Payload payload1(HUMIDITY, states[HUMIDITY]);
-    mesh.send(payload1, base_id);
-    Payload payload2(TEMPERATURE, states[TEMPERATURE]);
-    mesh.send(payload2, base_id);
-
-    // send time value
-    Payload payload3(TIME, states[TIME]);
-    mesh.send(payload3, base_id);
-  }
-  
-  // update network
-  mesh.update();
-  
-  // read message if available
-  while( mesh.available() ) {
-    Payload payload;
-    mesh.read(payload);
-    
-    // set new time
-    if(payload.key == TIME) {
-      set_time(0,payload.value);
-    }
-  }*/
+  //if( eeprom_ok )
+  //  saveSettings();
 }
 
 /****************************************************************************/
 
 bool read_DHT11() {
   dht11 DHT11;
-  int state = DHT11.read(DHT11_PIN);
+  int state = DHT11.read(DHT11PIN);
   switch (state) {
     case DHTLIB_OK:
       states[HUMIDITY] = DHT11.humidity;
-      states[TEMPERATURE] = DHT11.temperature;
+      states[TEMPER_OUT] = DHT11.temperature;
 
-      if(DEBUG) printf_P(PSTR("DHT11: Info: Sensor values: humidity: %d, temperature: %d.\n\r"), 
-                  states[HUMIDITY], states[TEMPERATURE]);
+      if(DEBUG) printf("DHT11: Info: Outside sensor values: humidity: %d, temperature: %d.\n\r", states[HUMIDITY], states[TEMPER_OUT]);
       return true;
     case DHTLIB_ERROR_CHECKSUM:
-      printf_P(PSTR("DHT11: Error: Checksum test failed!: The data may be incorrect!\n\r"));
+      printf("DHT11: Error: Checksum test failed!: The data may be incorrect!\n\r");
       return false;
     case DHTLIB_ERROR_TIMEOUT: 
-      printf_P(PSTR("DHT11: Error: Timeout occured!: Communication failed!\n\r"));
+      printf("DHT11: Error: Timeout occured!: Communication failed!\n\r");
       return false;
     default: 
-      printf_P(PSTR("DHT11: Error: Unknown error!\n\r"));
+      printf("DHT11: Error: Unknown error!\n\r");
       return false;
   }
 }
 
 /****************************************************************************/
 
-void read_time() {
-  RTC.getRAM(54, (uint8_t *)0xaa55, sizeof(uint16_t));
-  RTC.getTime();
-  states[CDN] = RTC.cdn;
-  states[TIME] = RTC.hour*60+RTC.minute;
-
-  if(DEBUG) printf_P(PSTR("RTC: Info: CDN: %d -> %d-%d-%d, TIME: %d -> %d:%d:%d.\n\r"), 
-              states[CDN], RTC.year, RTC.month, RTC.day, 
-              states[TIME], RTC.hour, RTC.minute, RTC.second);
+void read_DS18B20() {
+  dallas.requestTemperatures();
+  states[TEMPER_IN] = dallas.getTempCByIndex(0);
+  if(DEBUG) printf("DS18B20: Info: Temperature inside: %d.\n\r", states[TEMPER_IN]);
 }
 
 /****************************************************************************/
 
-void set_time(int _cdn, int _time) {
-  RTC.setRAM(54, (uint8_t *)0xffff, sizeof(uint16_t));
-  RTC.getRAM(54, (uint8_t *)0xffff, sizeof(uint16_t));
+void read_BH1750() {
+  states[LIGHT] = lightMeter.readLightLevel();
+  if(DEBUG) printf("BH1750: Info: Light intensity: %d.\n\r", states[LIGHT]);
+}
+
+/****************************************************************************/
+
+void read_RTC() {
+  //RTC.getRAM(54, (uint8_t *)0xaa55, sizeof(uint16_t));
+  RTC.getTime();
+  states[CDN] = RTC.cdn;
+  states[DTIME] = RTC.hour*60+RTC.minute;
+
+  if(DEBUG) printf("RTC: Info: CDN: %d -> %d-%d-%d, DTIME: %d -> %d:%d:%d.\n\r", 
+              states[CDN], RTC.year, RTC.month, RTC.day, 
+              states[DTIME], RTC.hour, RTC.minute, RTC.second);
+}
+
+/****************************************************************************/
+
+int get_cdn(int _day, int _month, int _year) {
+  uint8_t tmp1; 
+  uint16_t tmp2;
+  tmp1 = 0;
+  if ( _month >= 3 )
+    tmp1++;
+  tmp1 <<=1;
+  tmp2 = ((_month+2*611)/20)+_day-91-tmp1;
+  if ( tmp1 != 0 )
+    tmp2 += RTC.is_leap_year(_year);
+  tmp2--;
+  while( _year > 2000 ) {
+    _year--;
+    tmp2 += 365;
+    tmp2 += RTC.is_leap_year(_year);
+  }
+  // days after 2000-01-01
+  return tmp2;
+}
+
+/****************************************************************************/
+
+int get_dtime(int _hours, int _minutes) {
+  // minutes after 00:00
+  return _hours*60+_minutes;
+}
+
+/****************************************************************************/
+
+void set_RTC(int _cdn, int _dtime) {
+  //RTC.setRAM(54, (uint8_t *)0xffff, sizeof(uint16_t));
+  //RTC.getRAM(54, (uint8_t *)0xffff, sizeof(uint16_t));
   RTC.stopClock();
   
   if(_cdn > 0) {
     RTC.fillByCDN(_cdn);
-    printf_P(PSTR("RTC: Warning: set new CDN: %d.\n\r"), _cdn);  	
+    printf("RTC: Warning: set new CDN: %d.\n\r", _cdn);  	
   }
 
-  if(_time > 0) {
-    uint8_t minutes = _time % 60;
-    _time /= 60;
-    uint8_t hours = _time % 24;
+  if(_dtime > 0) {
+    uint8_t minutes = _dtime % 60;
+    _dtime /= 60;
+    uint8_t hours = _dtime % 24;
     RTC.fillByHMS(hours, minutes, 00);
-    printf_P(PSTR("RTC: Warning: set new time: %d:%d:00.\n\r"), 
+    printf("RTC: Warning: set new time: %d:%d:00.\n\r", 
       hours, minutes);
-  }
+  } 
 
   RTC.setTime();
-  RTC.setRAM(54, (uint8_t *)0xaa55, sizeof(uint16_t));
+  //RTC.setRAM(54, (uint8_t *)0xaa55, sizeof(uint16_t));
   RTC.startClock();
 }
 
 /****************************************************************************/
 
+void read_relays() {
+  states[PUMP_1] = relay1.isRelayOn();
+  if(DEBUG) printf("PUMP_1: Info: Relay state: %d.\n\r", states[PUMP_1]);
+
+  states[PUMP_2] = relay2.isRelayOn();
+  if(DEBUG) printf("PUMP_2: Info: Relay state: %d.\n\r", states[PUMP_2]);
+
+  //states[PUMP_3] = relay3.isRelayOn();
+  //if(DEBUG) printf("PUMP_3: Info: Relay state: %d.\n\r", states[PUMP_3]);
+
+  states[LAMP] = relay4.isRelayOn();
+  if(DEBUG) printf("LAMP: Info: Relay state: %d.\n\r", states[LAMP]);
+}
+
+/****************************************************************************/
+
 void check() {
-  if( states[TEMPERATURE] < 13 || states[TEMPERATURE] > 28 ) {
-    alarm(0);
-    printf_P(PSTR("CHECK: WARNING: Temperature: %d!\n\r"), states[TEMPERATURE]); 
-  }
 
-  if( states[HUMIDITY] < 35 && states[TEMPERATURE] > 25 ) {
-    printf_P(PSTR("CHECK: WARNING: Humidity too low: %d!\n\r"), states[HUMIDITY]);
-  }
-
-
-  //delay(50);                      // Wait 50ms between pings (about 20 pings/sec). 29ms should be the shortest delay between pings.
-  //unsigned int uS = sonar.ping(); // Send ping, get ping time in microseconds (uS).
-  //Serial.print("Ping: ");
-  //Serial.print(uS / US_ROUNDTRIP_CM); // Convert ping time to distance in cm and print result (0 = outside set distance range)
-  //Serial.println("cm");
-  // sonar.ping_cm();
-
-
-  //  uint16_t lux = lightMeter.readLightLevel();
-  //Serial.print("Light: ");
-  //Serial.print(lux);
-  //Serial.println(" lx");
 
 }
 
 /****************************************************************************/
 
-void alarm(int mode) {
-  //melody.beep(mode);	  	
+void alarm(int _mode) {
+  if(DEBUG) printf("ALARM: Info: Alarm raised.\n\r");
 
-  //int duration = states[TIME] - last_time_alarm;
-  // do alarm each time interval
-  /*if( duration > alarm_interval ) {
-    last_time_alarm = states[TIME];
-    if(DEBUG) printf_P(PSTR("CHECK: Info: Play alarm every %d sec.\n\r"), duration);
-    
-    melody.play();
-  }*/
 }
 
 /****************************************************************************/
 
-void relay(const char* relay, int state) {
-  /*// initialize relays pin
-  pinMode(RELAY1PIN, OUTPUT);
-  pinMode(RELAY2PIN, OUTPUT);
-  // turn on/off
-  if(strcmp(relay, RELAY_1) == 0) {
-    digitalWrite(RELAY1PIN, state);
-    // !!!lack in principal scheme, 
-    //both relay should be enabled!
-    digitalWrite(RELAY2PIN, state);
-  } 
-  else if(strcmp(relay, RELAY_2) == 0) {
-    digitalWrite(RELAY2PIN, state);
-    // !!!lack in principal scheme
-    //both relay should be enabled!
-    digitalWrite(RELAY1PIN, state);
-  } 
-  else {
-    printf("RELAY: Error: '%s' is unknown!\n\r", relay);
-    return;
+bool loadSettings() {
+  EEPROM.readBlock(settingsAdress, settings);
+  if(settings.id == SETTINGS_ID) {
+    if(DEBUG) printf("EEPROM: Info: Load settings.\n\r");
+    return true;
   }
-  // save states
-  if(state == RELAY_ON) {
-    if(DEBUG) printf("RELAY: Info: %s is enabled.\n\r", relay);
-    states[relay] = true;
-  } 
-  else if(state == RELAY_OFF) {
-    if(DEBUG) printf("RELAY: Info: %s is disabled.\n\r", relay);
-    states[relay] = false;
-  }*/
+  printf("EEPROM: Error: Loading check isn't passed! Can't load settings!\n\r");
+  return false;
 }
 
 /****************************************************************************/
 
-bool handle_button() {
-  button BUTTON;
-  //read button
-  /*int state = BUTTON.read(BUTTONPIN, led);
-  if(state == BUTTONLIB_RELEASE) {
-    return false;
-  } 
-  else if(state != BUTTONLIB_OK) {
-    printf("BUTTON: Error: Incorrect push! It's too short or long.\n\r");
-    return false;
-  }
-  // handle command
-  switch (BUTTON.command) {
-    case 1:
-      // turning ON relay #1
-      relay(RELAY_1, RELAY_ON);
-      return true;
-    case 2:
-      // turning ON relay #2
-      relay(RELAY_2, RELAY_ON);
-      return true;
-    case 3:
-      // turning OFF relay #1 and #2
-      relay(RELAY_1, RELAY_OFF);
-      relay(RELAY_2, RELAY_OFF);
-      return true;
-    default:
-      return false;
-  }*/
+void saveSettings() {
+  EEPROM.writeBlock(settingsAdress, settings);
+  if(DEBUG) printf("EEPROM: Info: Save settings.\n\r");
 }
+
+/****************************************************************************/
+
+void buttonMenuClickEvent() {
+  if(DEBUG) printf("Button MENU: Info: Click event.\n\r");
+
+};
+
+/****************************************************************************/
+
+void buttonNextClickEvent() {
+  if(DEBUG) printf("Button NEXT: Info: Click event.\n\r");
+
+};
+
+/****************************************************************************/
+
+void buttonMenuDoubleClickEvent() {
+  if(DEBUG) printf("Button MENU: Info: DoubleClick event.\n\r");
+
+};
+
+/****************************************************************************/
+
+void buttonNextDoubleClickEvent() {
+  if(DEBUG) printf("Button NEXT: Info: DoubleClick event.\n\r");
+
+};
+
+/****************************************************************************/
+
+void buttonMenuLongPressEvent() {
+  if(DEBUG) printf("Button MENU: Info: LongPress event.\n\r");
+
+};
+
+/****************************************************************************/
+
+void buttonNextLongPressEvent() {
+  if(DEBUG) printf("Button NEXT: Info: LongPress event.\n\r");
+
+};
+
+/****************************************************************************/
+
+void lcdShowHomeScreen() {
+  if(DEBUG) printf("LCD1609: Info: Home screen.\n\r");
+
+  lcd.clear(); 
+  lcd.print("Hello");
+  lcd.setCursor(0,1);
+  lcd.print("World!");
+};
 
 /****************************************************************************/

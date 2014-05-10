@@ -16,11 +16,7 @@ Written by Christopher Laws, March, 2013.
 #ifndef BH1750_h
 #define BH1750_h
 
-#if (ARDUINO >= 100)
 #include <Arduino.h>
-#else
-#include <WProgram.h>
-#endif
 #include "Wire.h"
 
 #define BH1750_DEBUG 0
