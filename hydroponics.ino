@@ -69,6 +69,15 @@ OneButton buttonNext(A3, true);
 // Set the pins on the I2C chip used for LCD connections: 
 //                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
 LiquidCrystal_I2C lcd(0x20, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+static int lcd_putc(char c, FILE *) {
+  lcd.write(c);
+  return c;
+};
+static FILE lcdout = {0};
+// Declare menu id
+int lcdMenuItem = 0;
+int lcdMenuEditMode = false;
+int lcdEditCursor = 0;
 
 // Declare state map
 struct comparator {
@@ -131,6 +140,7 @@ void setup()
   // Configure LCD1609
   // Initialize the lcd for 16 chars 2 lines and turn on backlight
   lcd.begin(16, 2);
+  fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
   lcdShowHomeScreen();
 }
 
@@ -317,44 +327,135 @@ void saveSettings() {
 
 /****************************************************************************/
 
-void buttonMenuClickEvent() {
-  if(DEBUG) printf("Button MENU: Info: Click event.\n\r");
+void buttonLeftClickEvent() {
+  if(DEBUG) printf("Button LEFT: Info: Click event.\n\r");
+  
+  if(lcdMenuEditMode == false) {
+    lcdShowMenuScreen(--lcdMenuItem);
+    return;  	
+  }
+
+  switch (lcdMenuItem) {
+    case 1:
+	  return;
+	case 2:
+	  return;
+	case 3:
+	  return;
+	case 4:
+	  return;
+	case 5:
+	  return;
+	case 6:
+	  return;
+	case 7:
+	  return;
+	case 8:
+	  return;
+	case 9:
+	  return;
+	case 10:
+	  return;
+	case 11:
+	  return;
+	case 12:
+	  return;
+	case 13:
+	  return;
+    default: 
+      return;
+  }
 
 };
 
 /****************************************************************************/
 
-void buttonNextClickEvent() {
-  if(DEBUG) printf("Button NEXT: Info: Click event.\n\r");
+void buttonRightClickEvent() {
+  if(DEBUG) printf("Button RIGHT: Info: Click event.\n\r");
+
+  if(lcdMenuEditMode == false) {
+    lcdShowMenuScreen(++lcdMenuItem);
+    return;  	
+  }
+
+  switch (lcdMenuItem) {
+    case 1:
+	  return;
+	case 2:
+	  return;
+	case 3:
+	  return;
+	case 4:
+	  return;
+	case 5:
+	  return;
+	case 6:
+	  return;
+	case 7:
+	  return;
+	case 8:
+	  return;
+	case 9:
+	  return;
+	case 10:
+	  return;
+	case 11:
+	  return;
+	case 12:
+	  return;
+	case 13:
+	  return;
+    default: 
+      return;
+  }
 
 };
 
 /****************************************************************************/
 
-void buttonMenuDoubleClickEvent() {
-  if(DEBUG) printf("Button MENU: Info: DoubleClick event.\n\r");
-
+void buttonLeftDoubleClickEvent() {
+  if(DEBUG) printf("Button LEFT: Info: DoubleClick event.\n\r");
+  
+  buttonLeftClickEvent();
+  buttonLeftClickEvent();
 };
 
 /****************************************************************************/
 
-void buttonNextDoubleClickEvent() {
-  if(DEBUG) printf("Button NEXT: Info: DoubleClick event.\n\r");
+void buttonRightDoubleClickEvent() {
+  if(DEBUG) printf("Button RIGHT: Info: DoubleClick event.\n\r");
 
+  buttonRightClickEvent();
+  buttonRightClickEvent();
 };
 
 /****************************************************************************/
 
-void buttonMenuLongPressEvent() {
-  if(DEBUG) printf("Button MENU: Info: LongPress event.\n\r");
+void buttonLeftLongPressEvent() {
+  if(DEBUG) printf("Button LEFT: Info: LongPress event.\n\r");
 
+  if(lcdMenuEditMode == false) {
+  	lcdMenuEditMode = true;
+    lcdEditCursor = lcdShowEditScreen(lcdMenuItem, lcdEditCursor);
+    return;
+  }
+
+  if(lcdEditCursor != 0) {
+  	lcdEditCursor = lcdShowEditScreen(lcdMenuItem, --lcdEditCursor);
+  	return;
+  }
+
+  lcdMenuEditMode = false;
+  lcdShowMenuScreen(lcdMenuItem);	
+  return;
 };
 
 /****************************************************************************/
 
-void buttonNextLongPressEvent() {
-  if(DEBUG) printf("Button NEXT: Info: LongPress event.\n\r");
+void buttonRightLongPressEvent() {
+  if(DEBUG) printf("Button RIGHT: Info: LongPress event.\n\r");
 
+  buttonLeftLongPressEvent(); 
 };
 
 /****************************************************************************/
@@ -362,10 +463,182 @@ void buttonNextLongPressEvent() {
 void lcdShowHomeScreen() {
   if(DEBUG) printf("LCD1609: Info: Home screen.\n\r");
 
-  lcd.clear(); 
-  lcd.print("Hello");
-  lcd.setCursor(0,1);
-  lcd.print("World!");
+  lcd.clear();
+  fprintf(&lcdout, "Hydroponic %d:%d", RTC.hour, RTC.minute); lcd.setCursor(0,1);
+  fprintf(&lcdout, "%dC %d% %dlux", states[TEMPER_OUT], states[HUMIDITY], states[LIGHT]);
+  lcdBlink(0, 13, 13);
 };
 
 /****************************************************************************/
+
+void lcdShowMenuScreen(int menu) {
+  if(DEBUG) printf("LCD1609: Info: Show menu screen #%d.\n\r", menu);
+  
+  lcd.clear();
+  switch (menu) {
+    case 1:
+      fprintf(&lcdout, "Watering daytime"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", wateringDayPeriod);
+	  return;
+	case 2:
+      fprintf(&lcdout, "Watering night"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", wateringNightPeriod);
+	  return;
+	case 3:
+      fprintf(&lcdout, "Watering sunrise"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", wateringSunrisePeriod);
+	  return;
+	case 4:
+      fprintf(&lcdout, "Misting daytime"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", mistingDayPeriod);
+	  return;
+	case 5:
+      fprintf(&lcdout, "Misting night"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", mistingNightPeriod);
+	  return;
+	case 6:
+      fprintf(&lcdout, "Misting sunrise"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", mistingSunrisePeriod);
+	  return;
+	case 7:
+      fprintf(&lcdout, "Day time"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "from %dh to %dh", daytimeFrom, daytimeTo);
+	  return;
+	case 8:
+      fprintf(&lcdout, "Night time"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "from %dh to %dh", nighttimeFrom, nighttimeTo);
+	  return;
+	case 9:
+      fprintf(&lcdout, "Light on when"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "lower %d lux", lightOnLower);
+	  return;
+	case 10:
+      fprintf(&lcdout, "Light day"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "duration %dh", lightDayDuration);
+	  return;
+	case 11:
+      fprintf(&lcdout, "Humidity not"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "less than %d%", humidityLow);
+	  return;
+	case 12:
+      fprintf(&lcdout, "Temperature not"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "less than %dC", temperatureLow);
+	  return;
+	case 13:
+  	  fprintf(&lcdout, "Current time"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "%d:%d %d-%d-%d", RTC.hour, RTC.minute, 
+      	RTC.day, RTC.month, RTC.year);
+	  return;	  
+    default: 
+      lcdShowHomeScreen();
+      return;
+  }
+};
+
+/****************************************************************************/
+
+int lcdShowEditScreen(int menu, cursor) {
+  if(DEBUG) printf("LCD1609: Info: Show edit screen #%d.\n\r", menu);
+  lcd.clear();
+  switch (menu) {
+    case 1:
+      fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", wateringDayPeriod);
+      lcdBlink(1, 6, 8);
+	  return 0;
+	case 2:
+      fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", wateringNightPeriod);
+      lcdBlink(1, 6, 8);
+	  return 0;
+	case 3:
+      fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", wateringSunrisePeriod);
+      lcdBlink(1, 6, 8);
+	  return 0;
+	case 4:
+      fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", mistingDayPeriod);
+      lcdBlink(1, 6, 8);
+	  return 0;
+	case 5:
+      fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", mistingNightPeriod);
+      lcdBlink(1, 6, 8);
+	  return 0;
+	case 6:
+      fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "every %d min", mistingSunrisePeriod);
+      lcdBlink(1, 6, 8);
+	  return 0;
+	case 7:
+      fprintf(&lcdout, "Changing range"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "from %dh to %dh", daytimeFrom, daytimeTo);
+      if(cursor == 1) {
+      	lcdBlink(1, 12, 14);
+      	return 0;	
+      }	
+      lcdBlink(1, 5, 7);
+	  return 1;
+	case 8:
+      fprintf(&lcdout, "Changing range"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "from %dh to %dh", nighttimeFrom, nighttimeTo);
+      if(cursor == 1) {
+      	lcdBlink(1, 12, 14);
+      	return 0;	
+      }	
+      lcdBlink(1, 5, 7);
+	  return 1;
+	case 9:
+      fprintf(&lcdout, "Changing light"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "lower %d lux", lightOnLower);
+      lcdBlink(1, 6, 11);
+	  return;
+	case 10:
+      fprintf(&lcdout, "Changing light"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "duration %dh", lightDayDuration);
+      lcdBlink(1, 10, 13);
+	  return;
+	case 11:
+      fprintf(&lcdout, "Changing humid."); lcd.setCursor(0,1);
+      fprintf(&lcdout, "less than %d%", humidityLow);
+      lcdBlink(1, 10, 13);
+      return;
+	case 12:
+      fprintf(&lcdout, "Changing temp."); lcd.setCursor(0,1);
+      fprintf(&lcdout, "less than %dC", temperatureLow);
+      lcdBlink(1, 10, 13);
+	  return;
+	case 13:
+  	  fprintf(&lcdout, "Setting time"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "%d:%d %d-%d-%d", RTC.hour, RTC.minute, 
+      	RTC.day, RTC.month, RTC.year);
+	  if(cursor == 4) {
+	  	lcdBlink(1, 12, 13);
+	  	return 0;
+	  } else if(cursor == 3) {
+		lcdBlink(1, 9, 10);
+		return 1;
+	  } else if(cursor == 2) {
+	  	lcdBlink(1, 6, 7);
+	  	return 2;
+	  } else if(cursor == 1) {
+	  	lcdBlink(1, 3, 4);
+	  	return 3;
+	  }
+	  lcdBlink(1, 0, 1);
+	  return 4;
+    default:
+      lcdShowHomeScreen();
+      return;
+  }
+};
+
+/****************************************************************************/
+
+void lcdBlink(int row, int start, int end) {
+    
+
+
+  if(DEBUG) printf("LCD1609: Info: Blink for: ?\n\r");
+};
