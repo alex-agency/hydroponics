@@ -85,7 +85,7 @@ struct comparator {
     return strcmp(str1, str2) == 0;
   }
 };
-SimpleMap<const char*, int, 12, comparator> states;
+SimpleMap<const char*, uint8_t, 13, comparator> states;
 
 // Declare EEPROM values
 bool eeprom_ok = true;
@@ -115,7 +115,8 @@ struct SettingsStruct {
 bool settingsChanged = false;
 
 // Declare delay managers, ms
-timer_t check_timer(5000);
+timer_t check_timer(15000);
+timer_t lcd_timer(500);
 
 //
 // Setup
@@ -143,8 +144,6 @@ void setup()
   // Configure buttons
   buttonLeft.attachClick(buttonLeftClickEvent);
   buttonRight.attachClick(buttonRightClickEvent);
-  //buttonMenu.attachDoubleClick(buttonMenuDoubleClickEvent);
-  //buttonNext.attachDoubleClick(buttonNextDoubleClickEvent);
   buttonLeft.attachLongPressStart(buttonLeftLongPressEvent);
   buttonRight.attachLongPressStart(buttonRightLongPressEvent);
 
@@ -153,7 +152,7 @@ void setup()
   lcd.begin(16, 2);
   fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
   lcd.autoscroll();
-  lcdShowMenuScreen(0);
+  lcdShowMenuScreen();
 }
 
 //
@@ -168,17 +167,25 @@ void loop()
     read_BH1750();
     read_RTC();
     read_relays();
+    read_levels();
 
     // check values
     check();
+
+    // save to EEPROM
+ 	if( settingsChanged && eeprom_ok )
+      saveSettings();
+  }
+
+  if( lcd_timer ) {
+    lcdUpdate();
   }
 
   // update buttons
   buttonLeft.tick();
   buttonRight.tick();
 
-  //if( eeprom_ok )
-  //  saveSettings();
+  delay(50); // not so fast
 }
 
 /****************************************************************************/
@@ -190,8 +197,9 @@ bool read_DHT11() {
     case DHTLIB_OK:
       states[HUMIDITY] = DHT11.humidity;
       states[TEMPER_OUT] = DHT11.temperature;
-
-      if(DEBUG) printf("DHT11: Info: Outside sensor values: humidity: %d, temperature: %d.\n\r", states[HUMIDITY], states[TEMPER_OUT]);
+      if(DEBUG) 
+      	printf("DHT11: Info: Outside sensor values: humidity: %d, temperature: %d.\n\r", 
+      	states[HUMIDITY], states[TEMPER_OUT]);
       return true;
     case DHTLIB_ERROR_CHECKSUM:
       printf("DHT11: Error: Checksum test failed!: The data may be incorrect!\n\r");
@@ -297,11 +305,18 @@ void read_relays() {
   states[PUMP_2] = relay2.isRelayOn();
   if(DEBUG) printf("PUMP_2: Info: Relay state: %d.\n\r", states[PUMP_2]);
 
+  // reserved for upgrade
   //states[PUMP_3] = relay3.isRelayOn();
   //if(DEBUG) printf("PUMP_3: Info: Relay state: %d.\n\r", states[PUMP_3]);
 
   states[LAMP] = relay4.isRelayOn();
   if(DEBUG) printf("LAMP: Info: Relay state: %d.\n\r", states[LAMP]);
+}
+
+/****************************************************************************/
+
+void read_levels() {
+
 }
 
 /****************************************************************************/
@@ -343,12 +358,12 @@ void buttonLeftClickEvent() {
   if(DEBUG) printf("Button LEFT: Info: Click event.\n\r");
   
   if(lcdMenuEditMode == false) {
-    lcdShowMenuScreen(--lcdMenuItem);
+  	lcdMenuItem--; // move backward, previous menu
+    lcdShowMenuScreen();
     return;  	
   }
 
   settingsChanged = true;
-
   switch (lcdMenuItem) {
     case 1:
       settings.wateringDayPeriod--;
@@ -423,8 +438,7 @@ void buttonLeftClickEvent() {
       settingsChanged = false;
   	  break;
   }
-
-  lcdShowEditScreen(lcdMenuItem, lcdEditCursor);
+  lcdShowEditScreen();
 };
 
 /****************************************************************************/
@@ -433,12 +447,12 @@ void buttonRightClickEvent() {
   if(DEBUG) printf("Button RIGHT: Info: Click event.\n\r");
 
   if(lcdMenuEditMode == false) {
-    lcdShowMenuScreen(++lcdMenuItem);
+  	lcdMenuItem++; // move forward, next menu
+    lcdShowMenuScreen();
     return;  	
   }
 
   settingsChanged = true;
-
   switch (lcdMenuItem) {
     case 1:
       settings.wateringDayPeriod++;
@@ -510,29 +524,10 @@ void buttonRightClickEvent() {
       } else {
         RTC.year++;
       }
-      settingsChanged = false;
+      settingsChanged = false; // nothing save to eeprom
       break;
   }
-
-  lcdShowEditScreen(lcdMenuItem, lcdEditCursor);
-};
-
-/****************************************************************************/
-
-/*void buttonLeftDoubleClickEvent() {
-  if(DEBUG) printf("Button LEFT: Info: DoubleClick event.\n\r");
-  
-  buttonLeftClickEvent();
-  buttonLeftClickEvent();
-};
-
-/****************************************************************************/
-
-/*void buttonRightDoubleClickEvent() {
-  if(DEBUG) printf("Button RIGHT: Info: DoubleClick event.\n\r");
-
-  buttonRightClickEvent();
-  buttonRightClickEvent();
+  lcdShowEditScreen();
 };
 
 /****************************************************************************/
@@ -542,12 +537,13 @@ void buttonLeftLongPressEvent() {
 
   if(lcdMenuEditMode == false) {
   	lcdMenuEditMode = true;
-    lcdEditCursor = lcdShowEditScreen(lcdMenuItem, lcdEditCursor);
+    lcdEditCursor = lcdShowEditScreen();
     return;
   }
 
   if(lcdEditCursor != 0) {
-  	lcdEditCursor = lcdShowEditScreen(lcdMenuItem, --lcdEditCursor);
+  	lcdEditCursor--; // move to next edit field
+  	lcdEditCursor = lcdShowEditScreen();
   	return;
   }
 
@@ -556,7 +552,7 @@ void buttonLeftLongPressEvent() {
     RTC.setTime();
     RTC.startClock();
   }
-  lcdShowMenuScreen(lcdMenuItem);	
+  lcdShowMenuScreen();	
   return;
 };
 
@@ -570,15 +566,14 @@ void buttonRightLongPressEvent() {
 
 /****************************************************************************/
 
-void lcdShowMenuScreen(uint8_t menu) {
-  if(DEBUG) printf("LCD1609: Info: Show menu screen #%d.\n\r", menu);
-  
+void lcdShowMenuScreen() {
+  if(DEBUG) printf("LCD1609: Info: Show menu screen #%d.\n\r", lcdMenuItem);
   lcd.clear();
-
-  switch (menu) {
+  switch (lcdMenuItem) {
   case 0:
-      fprintf(&lcdout, "Hydroponic %d:%d", RTC.hour, RTC.minute); lcd.setCursor(0,1);
-      fprintf(&lcdout, "%dC %dC %d% %dlux", 
+      fprintf(&lcdout, "Hydroponic %d:%d", RTC.hour, RTC.minute); 
+      lcd.setCursor(0,1);
+      fprintf(&lcdout, "tIn %dC, tOut %dC, Hum. %d%, Light %d lux", 
         states[TEMPER_IN], states[TEMPER_OUT], states[HUMIDITY], states[LIGHT]);
       lcdBlink(1, 13, 13);
     return;
@@ -638,18 +633,18 @@ void lcdShowMenuScreen(uint8_t menu) {
       	RTC.day, RTC.month, RTC.year);
 	  return;	  
     default: 
-      lcdShowHomeScreen();
+      lcdMenuItem = 0; lcdShowMenuScreen();
       return;
   }
 };
 
 /****************************************************************************/
 
-uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
+uint8_t lcdShowEditScreen() {
   if(DEBUG) printf("LCD1609: Info: Show edit screen #%d with cursor: %d.\n\r", 
-    menu, cursor);
+    lcdMenuItem, lcdEditCursor);
   lcd.clear();
-  switch (menu) {
+  switch (lcdMenuItem) {
     case 1:
       fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringDayPeriod);
@@ -684,7 +679,7 @@ uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
       fprintf(&lcdout, "Changing range"); lcd.setCursor(0,1);
       fprintf(&lcdout, "from %dh to %dh", 
         settings.daytimeFrom, settings.daytimeTo);
-      if(cursor == 1) {
+      if(lcdEditCursor == 1) {
       	lcdBlink(1, 12, 14);
       	return 0;	
       }	
@@ -694,7 +689,7 @@ uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
       fprintf(&lcdout, "Changing range"); lcd.setCursor(0,1);
       fprintf(&lcdout, "from %dh to %dh", 
         settings.nighttimeFrom, settings.nighttimeTo);
-      if(cursor == 1) {
+      if(lcdEditCursor == 1) {
       	lcdBlink(1, 12, 14);
       	return 0;	
       }	
@@ -721,41 +716,40 @@ uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
       lcdBlink(1, 10, 13);
 	  return 0;
 	case 13:
-  case 0:
+    case 0:
   	  fprintf(&lcdout, "Setting time"); lcd.setCursor(0,1);
       fprintf(&lcdout, "%d:%d %d-%d-%d", RTC.hour, RTC.minute, 
       	RTC.day, RTC.month, RTC.year);
-	  if(cursor == 4) {
+	  if(lcdEditCursor == 4) {
 	  	lcdBlink(1, 12, 13);
 	  	return 0;
-	  } else if(cursor == 3) {
+	  } else if(lcdEditCursor == 3) {
 		lcdBlink(1, 9, 10);
 		return 1;
-	  } else if(cursor == 2) {
+	  } else if(lcdEditCursor == 2) {
 	  	lcdBlink(1, 6, 7);
 	  	return 2;
-	  } else if(cursor == 1) {
+	  } else if(lcdEditCursor == 1) {
 	  	lcdBlink(1, 3, 4);
 	  	return 3;
 	  }
 	  lcdBlink(1, 0, 1);
 	  return 4;
     default:
-      lcdShowMenuScreen(0);
+      lcdMenuItem = 0; lcdShowMenuScreen();
       return 0;
   }
 };
 
 /****************************************************************************/
 
-void lcdBlink(uint8_t row, uint8_t start, uint8_t end) {
-  
+void lcdBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
   if(lcdBlink) {
-    if(DEBUG) printf("LCD1609: Info: Blink for: %d\n\r", end - start + 1); 
+    if(DEBUG) printf("LCD1609: Info: Blink for: %d\n\r", _end-_start+1); 
     
-    while(start <= end) {
-      lcd.setCursor(row, start); lcd.print(" ");
-      start++;
+    while(_start <= _end) {
+      lcd.setCursor(_row, _start); lcd.print(" ");
+      _start++;
     }
     lcdBlink = false;
     return;
@@ -766,9 +760,13 @@ void lcdBlink(uint8_t row, uint8_t start, uint8_t end) {
 /****************************************************************************/
 
 void lcdUpdate() {
-
-
+  if(lcdMenuEditMode) {
+  	lcdShowEditScreen();
+  } else {
+  	lcdShowMenuScreen();
+  }
 };
 
+/****************************************************************************/
 
 
