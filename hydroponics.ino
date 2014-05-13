@@ -152,7 +152,8 @@ void setup()
   // Initialize the lcd for 16 chars 2 lines and turn on backlight
   lcd.begin(16, 2);
   fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
-  lcdShowHomeScreen();
+  lcd.autoscroll();
+  lcdShowMenuScreen(0);
 }
 
 //
@@ -569,23 +570,19 @@ void buttonRightLongPressEvent() {
 
 /****************************************************************************/
 
-void lcdShowHomeScreen() {
-  if(DEBUG) printf("LCD1609: Info: Home screen.\n\r");
-
-  lcd.clear();
-  fprintf(&lcdout, "Hydroponic %d:%d", RTC.hour, RTC.minute); lcd.setCursor(0,1);
-  fprintf(&lcdout, "%dC %d% %dlux", states[TEMPER_OUT], states[HUMIDITY], states[LIGHT]);
-  lcdBlink(0, 13, 13);
-};
-
-/****************************************************************************/
-
 void lcdShowMenuScreen(uint8_t menu) {
   if(DEBUG) printf("LCD1609: Info: Show menu screen #%d.\n\r", menu);
   
   lcd.clear();
+
   switch (menu) {
-    case 1:
+  case 0:
+      fprintf(&lcdout, "Hydroponic %d:%d", RTC.hour, RTC.minute); lcd.setCursor(0,1);
+      fprintf(&lcdout, "%dC %dC %d% %dlux", 
+        states[TEMPER_IN], states[TEMPER_OUT], states[HUMIDITY], states[LIGHT]);
+      lcdBlink(1, 13, 13);
+    return;
+  case 1:
       fprintf(&lcdout, "Watering daytime"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringDayPeriod);
 	  return;
@@ -724,6 +721,7 @@ uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
       lcdBlink(1, 10, 13);
 	  return 0;
 	case 13:
+  case 0:
   	  fprintf(&lcdout, "Setting time"); lcd.setCursor(0,1);
       fprintf(&lcdout, "%d:%d %d-%d-%d", RTC.hour, RTC.minute, 
       	RTC.day, RTC.month, RTC.year);
@@ -743,7 +741,7 @@ uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
 	  lcdBlink(1, 0, 1);
 	  return 4;
     default:
-      lcdShowHomeScreen();
+      lcdShowMenuScreen(0);
       return 0;
   }
 };
@@ -751,8 +749,26 @@ uint8_t lcdShowEditScreen(uint8_t menu, uint8_t cursor) {
 /****************************************************************************/
 
 void lcdBlink(uint8_t row, uint8_t start, uint8_t end) {
+  
+  if(lcdBlink) {
+    if(DEBUG) printf("LCD1609: Info: Blink for: %d\n\r", end - start + 1); 
     
-
-
-  if(DEBUG) printf("LCD1609: Info: Blink for: ?\n\r");
+    while(start <= end) {
+      lcd.setCursor(row, start); lcd.print(" ");
+      start++;
+    }
+    lcdBlink = false;
+    return;
+  }
+  lcdBlink = true;
 };
+
+/****************************************************************************/
+
+void lcdUpdate() {
+
+
+};
+
+
+
