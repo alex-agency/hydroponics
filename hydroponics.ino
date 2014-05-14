@@ -31,9 +31,13 @@ DallasTemperature dallas(&oneWire);
 // Declare DS18B20 sensor state map key
 #define TEMPER_IN  "temper in"
 
-// Declare liquid sensor state map keys
-#define LOW_SUBSTRAT  "low substrat"
-#define DELIVERED  "delivered"
+// Declare sensors analog pins
+#define FULL_TANKPIN  A0
+#define DONEPIN  A1
+#define LOW_WATERPIN  A6
+// Declare liquid sensors state map keys
+#define FULL_TANK  "full tank"
+#define DONE  "done"
 #define LOW_WATER  "low water"
 
 // Declare RTC state map keys
@@ -78,6 +82,7 @@ static FILE lcdout = {0};
 uint8_t lcdMenuItem = 0;
 bool lcdMenuEditMode = false;
 uint8_t lcdEditCursor = 0;
+bool lcd_blink = false;
 
 // Declare state map
 struct comparator {
@@ -153,6 +158,11 @@ void setup()
   fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
   lcd.autoscroll();
   lcdShowMenuScreen();
+
+  // initialize sensors pins with internal pullup resistor
+  pinMode(FULL_TANKPIN, INPUT_PULLUP);
+  pinMode(DONEPIN, INPUT_PULLUP);
+  pinMode(LOW_WATERPIN, INPUT_PULLUP);
 }
 
 //
@@ -167,25 +177,26 @@ void loop()
     read_BH1750();
     read_RTC();
     read_relays();
-    read_levels();
 
     // check values
     check();
 
     // save to EEPROM
- 	if( settingsChanged && eeprom_ok )
+ 	  if( settingsChanged && eeprom_ok )
       saveSettings();
   }
 
   if( lcd_timer ) {
     lcdUpdate();
+    // read water sensors
+    read_sensors();
   }
 
   // update buttons
   buttonLeft.tick();
   buttonRight.tick();
 
-  delay(50); // not so fast
+  delay(100); // not so fast
 }
 
 /****************************************************************************/
@@ -315,8 +326,14 @@ void read_relays() {
 
 /****************************************************************************/
 
-void read_levels() {
+void read_sensors() {
+  states[FULL_TANK] = digitalRead(FULL_TANKPIN);
+  states[DONE] = digitalRead(DONEPIN);
 
+  states[LOW_WATER] = analogRead(LOW_WATERPIN);
+  if(DEBUG) 
+    printf("SENSORS: Info: Full tank: %d, Wattering done: %d, Low water: %d.\n\r", 
+      states[FULL_TANK], states[DONE], states[LOW_WATER]);
 }
 
 /****************************************************************************/
@@ -751,10 +768,10 @@ void lcdBlink(uint8_t _row, uint8_t _start, uint8_t _end) {
       lcd.setCursor(_row, _start); lcd.print(" ");
       _start++;
     }
-    lcdBlink = false;
+    lcd_blink = false;
     return;
   }
-  lcdBlink = true;
+  lcd_blink = true;
 };
 
 /****************************************************************************/
