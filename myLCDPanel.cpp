@@ -1,4 +1,5 @@
 
+#include "mylcdpanel.h"
 #include "timer.h"
 
 // Delay manager in ms
@@ -9,8 +10,10 @@ timer_t lcd_timer(500);
 
 /****************************************************************************/
 
-MyLCDPanel::MyLCDPanel( uint8_t _left_pin, uint8_t _right_pin ):
-  buttonLeft(_left_pin, true), buttonRight(_right_pin, true) {}
+MyLCDPanel::MyLCDPanel( uint8_t _left_pin, uint8_t _right_pin ) {
+  leftButton(_left_pin, true);
+  rightButton(_right_pin, true);
+}
 
 /****************************************************************************/
 
@@ -24,10 +27,10 @@ void begin( void )
   showMenu();
 
   // Configure buttons
-  buttonLeft.attachClick( buttonLeftClick );
-  buttonLeft.attachLongPressStart( buttonLeftLongPress );
-  buttonRight.attachClick( buttonRightClick );
-  buttonRight.attachLongPressStart( buttonLeftLongPress );
+  leftButton.attachClick( leftButtonClick );
+  leftButton.attachLongPressStart( leftButtonLongPress );
+  rightButton.attachClick( rightButtonClick );
+  rightButton.attachLongPressStart( leftButtonLongPress );
 }
 
 /****************************************************************************/
@@ -47,8 +50,8 @@ void update( void )
     }
   }
 
-  buttonLeft.tick();
-  buttonRight.tick();
+  leftButton.tick();
+  rightButton.tick();
 };
 
 /****************************************************************************/
@@ -303,7 +306,7 @@ bool doBlink(uint8_t _row, uint8_t _start, uint8_t _end) {
 
 /****************************************************************************/
 
-void buttonLeftClick() {
+void leftButtonClick() {
   if(DEBUG) printf_P(PSTR("Button LEFT: Info: Click event.\n\r");
   
   if(menuEditMode == false) {
@@ -395,7 +398,7 @@ void buttonLeftClick() {
 
 /****************************************************************************/
 
-void buttonRightClick() {
+void rightButtonClick() {
   if(DEBUG) printf_P(PSTR("Button RIGHT: Info: Click event.\n\r");
 
   if(menuEditMode == false) {
@@ -487,7 +490,7 @@ void buttonRightClick() {
 
 /****************************************************************************/
 
-void buttonLeftLongPress() {
+void leftButtonLongPress() {
   if(DEBUG) printf_P(PSTR("Button LEFT: Info: LongPress event.\n\r");
 
   if(menuEditMode == false) {
