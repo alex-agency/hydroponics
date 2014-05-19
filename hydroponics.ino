@@ -1,9 +1,9 @@
 // Import libraries
 #include <Wire.h>
+#include "printf.h"
 #include "LiquidCrystal_I2C.h"
 #include "OneWire.h"
 #include "DallasTemperature.h"
-#include "printf.h"
 #include "dht11.h"
 #include "SimpleMap.h"
 #include "timer.h"
@@ -35,11 +35,11 @@ DallasTemperature dallas(&oneWire);
 // Declare sensors analog pins
 #define FULL_TANKPIN  A0
 #define DONEPIN  A1
-#define LOW_WATERPIN  A6
+#define WATER_ENOUGHPIN  A6
 // Declare liquid sensors state map keys
 #define FULL_TANK  "full tank"
 #define DONE  "done"
-#define LOW_WATER  "low water"
+#define WATER_ENOUGH  "water enough"
 
 // Declare RTC state map keys
 #define CDN  "cdn" // days after 2000-01-01
@@ -69,21 +69,30 @@ SeeeduinoRelay relay4 = SeeeduinoRelay(4,LOW);
 // Declare Warning status state map key
 #define WARNING  "warning"
 // Declare Warning variables
-uint8_t const NO_WARNING = 0; 
+uint8_t const NO_WARNING = 0;
+uint8_t const WARNING_NO_WATER = 1;
+uint8_t const WARNING_SUBSTRATE_FULL = 2;
+uint8_t const WARNING_SUBSTRATE_LOW = 3;
+uint8_t const WARNING_NO_SUBSTRATE = 4;
+uint8_t const WARNING_DONE = 5;
+uint8_t const WARNING_WATERING = 6;
+uint8_t const WARNING_MISTING = 7;
+uint8_t const WARNING_TEMPERATURE_COLD = 8;
+uint8_t const WARNING_SUBSTRATE_COLD = 9;
 
 // Declare buttons and its pins 
-OneButton buttonLeft(A2, true);
-OneButton buttonRight(A3, true);
+//OneButton buttonLeft(A2, true);
+//OneButton buttonRight(A3, true);
 
 // Declare LCD1609
 // Set the pins on the I2C chip used for LCD connections: 
 //                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
-LiquidCrystal_I2C lcd(0x20, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
-static int lcd_putc(char c, FILE *) {
-  lcd.write(c);
-  return c;
-};
-static FILE lcdout = {0};
+//LiquidCrystal_I2C lcd(0x20, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+//static int lcd_putc(char c, FILE *) {
+//  lcd.write(c);
+//  return c;
+//};
+//static FILE lcdout = {0};
 // Declare lcd menu variables
 uint8_t const HOME = 0;
 uint8_t const WATTERING_DAY = 1;
@@ -114,34 +123,32 @@ struct comparator {
 SimpleMap<const char*, uint8_t, 14, comparator> states;
 
 // Declare EEPROM values
-bool eeprom_ok = true;
-uint16_t settingsAdress = 0;
-// where to store config data
-#define memoryBase 32
-// ID of the settings block
-#define SETTINGS_ID  "01"
+#define SETTINGS_ID  "hs"
+bool eeprom_ok = false;
+uint16_t eeprom_offset = 0;
+uint8_t eeprom_max_writes = 50;
+bool settings_changed = false;
 // Declare settings structure
 struct SettingsStruct {
-  char id[3];
   uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
   uint8_t mistingDayPeriod, mistingNightPeriod, mistingSunrisePeriod;
   uint8_t daytimeFrom, daytimeTo;
   uint8_t nighttimeFrom, nighttimeTo;
   uint8_t lightThreshold, lightDayDuration;
   uint8_t humidThreshold, tempThreshold, tempSubsThreshold;
+  char id[3];
 } settings = { 
-  SETTINGS_ID,
   60, 180, 90,
   30, 90, 60,
   13, 16,
   21, 04,
   800, 14,
-  40, 20, 20
-};
-bool settingsChanged = false;
+  40, 20, 20,
+  SETTINGS_ID
+}, memory;
 
 // Declare delay managers, ms
-timer_t check_timer(15000);
+timer_t check_timer(30000);
 timer_t lcd_timer(500);
 
 //
@@ -153,37 +160,42 @@ void setup()
   Serial.begin(57600);
   printf_begin();
 
-  // Start up Dallas Temperature library
+  // Configure EEPROM
+  // prevent to burn EEPROM
+  EEPROM.setMaxAllowedWrites(eeprom_max_writes);
+  // load settings
+  eeprom_ok = loadSettings();
+
+  // Configure DS18B20
   dallas.begin();
 
-  // Configure EEPROM
-  EEPROM.setMemPool(memoryBase, EEPROMSizeNano);
-  settingsAdress = EEPROM.getAddress(sizeof(SettingsStruct)); 
-  eeprom_ok = loadSettings();
+  // Configure BH1750
+  lightMeter.begin(BH1750_ONE_TIME_HIGH_RES_MODE);
 
   // Configure RTC
   // Shift NV-RAM address 0x08 for RTC
   //RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
-  // Set Clock
-  //set_RTC(get_cdn(2014, 5, 9), get_dtime(11, 0));
 
   // Configure buttons
-  buttonLeft.attachClick(buttonLeftClickEvent);
-  buttonRight.attachClick(buttonRightClickEvent);
-  buttonLeft.attachLongPressStart(buttonLeftLongPressEvent);
-  buttonRight.attachLongPressStart(buttonRightLongPressEvent);
+  //buttonLeft.attachClick(buttonLeftClickEvent);
+  //buttonRight.attachClick(buttonRightClickEvent);
+  //buttonLeft.attachLongPressStart(buttonLeftLongPressEvent);
+  //buttonRight.attachLongPressStart(buttonRightLongPressEvent);
 
   // Configure LCD1609
   // Initialize the lcd for 16 chars 2 lines and turn on backlight
-  lcd.begin(16, 2);
-  fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
-  lcd.autoscroll();
-  lcdShowMenuScreen();
+  //lcd.begin(16, 2);
+  //fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
+  //lcd.autoscroll();
+  //lcdShowMenuScreen();
 
   // initialize sensors pins with internal pullup resistor
   pinMode(FULL_TANKPIN, INPUT_PULLUP);
   pinMode(DONEPIN, INPUT_PULLUP);
-  pinMode(LOW_WATERPIN, INPUT_PULLUP);
+  pinMode(WATER_ENOUGHPIN, INPUT_PULLUP);
+
+  // check connected devices
+  system_check();
 }
 
 //
@@ -203,19 +215,19 @@ void loop()
     check();
 
     // save to EEPROM
- 	  if( settingsChanged && eeprom_ok )
+    if( settings_changed && eeprom_ok )
       saveSettings();
   }
 
   if( lcd_timer ) {
-    lcdUpdate();
+    //lcdUpdate();
     // read water sensors
     read_sensors();
   }
 
   // update buttons
-  buttonLeft.tick();
-  buttonRight.tick();
+  //buttonLeft.tick();
+  //buttonRight.tick();
 
   delay(100); // not so fast
 }
@@ -230,36 +242,56 @@ bool read_DHT11() {
       states[HUMIDITY] = DHT11.humidity;
       states[T_OUTSIDE] = DHT11.temperature;
       if(DEBUG) 
-      	printf("DHT11: Info: Outside sensor values: humidity: %d%, temperature: %dC.\n\r", 
+      	printf_P(PSTR("DHT11: Info: Outside sensor values: humidity: %d%, temperature: %dC.\n\r"), 
       	states[HUMIDITY], states[T_OUTSIDE]);
       return true;
     case DHTLIB_ERROR_CHECKSUM:
-      printf("DHT11: Error: Checksum test failed!: The data may be incorrect!\n\r");
+      printf_P(PSTR("DHT11: Error: Checksum test failed!: The data may be incorrect!\n\r"));
       return false;
     case DHTLIB_ERROR_TIMEOUT: 
-      printf("DHT11: Error: Timeout occured!: Communication failed!\n\r");
+      printf_P(PSTR("DHT11: Error: Timeout occured!: Communication failed!\n\r"));
       return false;
     default: 
-      printf("DHT11: Error: Unknown error!\n\r");
+      printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
       return false;
   }
 }
 
 /****************************************************************************/
 
-void read_DS18B20() {
+bool read_DS18B20() {
   dallas.requestTemperatures();
-  states[T_INSIDE] = dallas.getTempCByIndex(0);
-  states[T_SUBSTRATE] = dallas.getTempCByIndex(1);
-  if(DEBUG) printf("DS18B20: Info: Temperature substrate: %dC, inside computer: %dC.\n\r", 
-  	states[T_SUBSTRATE], states[T_INSIDE]);
+  int value = dallas.getTempCByIndex(0);
+  if(value == DEVICE_DISCONNECTED_C) {
+    printf_P(PSTR("DS18B20: Error: Inside sensor communication failed!\n\r"));
+    return false;
+  }
+  states[T_INSIDE] = value;
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Temperature inside: %dC.\n\r"), 
+        states[T_INSIDE]);
+  
+  value = dallas.getTempCByIndex(1);
+  if(value == DEVICE_DISCONNECTED_C) {
+    printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
+    return false;
+  }
+  states[T_SUBSTRATE] = value;
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Temperature substrate: %dC.\n\r"), 
+  	states[T_SUBSTRATE]);
+  return true;
 }
 
 /****************************************************************************/
 
-void read_BH1750() {
-  states[LIGHT] = lightMeter.readLightLevel();
-  if(DEBUG) printf("BH1750: Info: Light intensity: %d.\n\r", states[LIGHT]);
+bool read_BH1750() {
+  uint16_t value = lightMeter.readLightLevel();
+  if(value == 54612) {
+    printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
+    return false;
+  }
+  states[LIGHT] = value;
+  if(DEBUG) printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), states[LIGHT]);
+  return true;
 }
 
 /****************************************************************************/
@@ -270,7 +302,7 @@ void read_RTC() {
   states[CDN] = RTC.cdn;
   states[DTIME] = RTC.hour*60+RTC.minute;
 
-  if(DEBUG) printf("RTC: Info: CDN: %d -> %d-%d-%d, DTIME: %d -> %d:%d:%d.\n\r", 
+  if(DEBUG) printf_P(PSTR("RTC: Info: CDN: %d -> %d-%d-%d, DTIME: %d -> %d:%d:%d.\n\r"), 
               states[CDN], RTC.year, RTC.month, RTC.day, 
               states[DTIME], RTC.hour, RTC.minute, RTC.second);
 }
@@ -278,8 +310,8 @@ void read_RTC() {
 /****************************************************************************/
 
 uint16_t get_cdn(uint8_t _day, uint8_t _month, uint16_t _year) {
-  uint8_t tmp1; 
-  uint16_t tmp2;
+  int tmp1; 
+  int tmp2;
   tmp1 = 0;
   if ( _month >= 3 )
     tmp1++;
@@ -313,7 +345,7 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
   
   if(_cdn > 0) {
     RTC.fillByCDN(_cdn);
-    printf("RTC: Warning: set new CDN: %d.\n\r", _cdn);  	
+    printf_P(PSTR("RTC: Warning: set new CDN: %d.\n\r"), _cdn);
   }
 
   if(_dtime > 0) {
@@ -321,7 +353,7 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
     _dtime /= 60;
     uint8_t hours = _dtime % 24;
     RTC.fillByHMS(hours, minutes, 00);
-    printf("RTC: Warning: set new time: %d:%d:00.\n\r", 
+    printf_P(PSTR("RTC: Warning: set new time: %d:%d:00.\n\r"), 
       hours, minutes);
   } 
 
@@ -334,17 +366,17 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
 
 void read_relays() {
   states[PUMP_1] = relay1.isRelayOn();
-  if(DEBUG) printf("PUMP_1: Info: Relay state: %d.\n\r", states[PUMP_1]);
+  if(DEBUG) printf_P(PSTR("PUMP_1: Info: Relay state: %d.\n\r"), states[PUMP_1]);
 
   states[PUMP_2] = relay2.isRelayOn();
-  if(DEBUG) printf("PUMP_2: Info: Relay state: %d.\n\r", states[PUMP_2]);
+  if(DEBUG) printf_P(PSTR("PUMP_2: Info: Relay state: %d.\n\r"), states[PUMP_2]);
 
   // reserved for upgrade
   //states[PUMP_3] = relay3.isRelayOn();
-  //if(DEBUG) printf("PUMP_3: Info: Relay state: %d.\n\r", states[PUMP_3]);
+  //if(DEBUG) printf_P(PSTR("PUMP_3: Info: Relay state: %d.\n\r"), states[PUMP_3]);
 
   states[LAMP] = relay4.isRelayOn();
-  if(DEBUG) printf("LAMP: Info: Relay state: %d.\n\r", states[LAMP]);
+  if(DEBUG) printf_P(PSTR("LAMP: Info: Relay state: %d.\n\r"), states[LAMP]);
 }
 
 /****************************************************************************/
@@ -353,10 +385,84 @@ void read_sensors() {
   states[FULL_TANK] = digitalRead(FULL_TANKPIN);
   states[DONE] = digitalRead(DONEPIN);
 
-  states[LOW_WATER] = analogRead(LOW_WATERPIN);
+  states[WATER_ENOUGH] = analogRead(WATER_ENOUGHPIN);
   if(DEBUG) 
-    printf("SENSORS: Info: Full tank: %d, Wattering done: %d, Low water: %d.\n\r", 
-      states[FULL_TANK], states[DONE], states[LOW_WATER]);
+    printf_P(PSTR("SENSORS: Info: Full tank: %d, Wattering done: %d, Water enough: %d.\n\r"), 
+      states[FULL_TANK], states[DONE], states[WATER_ENOUGH]);
+}
+
+/****************************************************************************/
+
+bool loadSettings() {
+  // search through the EEPROM for a valid structure
+  for ( ; eeprom_offset < EEPROMSizeATmega328-sizeof(memory) ; ++eeprom_offset) {    
+    //read a struct sized block from the EEPROM
+    EEPROM.readBlock(eeprom_offset, memory);
+    if (strcmp(memory.id, SETTINGS_ID) == 0) {
+      // load settings        
+      settings = memory;
+      if(DEBUG) printf_P(PSTR("EEPROM: Info: Settings loaded.\n\r"));
+      return true;
+    }
+  }
+  printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
+  return false;
+}
+
+/****************************************************************************/
+
+bool saveSettings() {
+  // move on one position
+  ++eeprom_offset;
+  // if writing at offset would mean going outside the EEPROM limit
+  if(eeprom_offset > EEPROMSizeATmega328-sizeof(settings)) 
+    eeprom_offset = 0;
+
+  int writeCount = EEPROM.updateBlock(eeprom_offset, settings);
+  
+  if(writeCount > 0) {
+    if(DEBUG) printf_P(PSTR("EEPROM: Info: Saved settings at address %d with size %d.\n\r"),
+    eeprom_offset, writeCount);
+      return true;
+  }
+  printf_P(PSTR("EEPROM: Error: Can't save settings! Stored %d of %d at address %d.\n\r"),
+    writeCount, sizeof(settings), eeprom_offset);
+  return false;
+}
+
+/****************************************************************************/
+
+void system_check() {
+  if(eeprom_ok == false) {
+    printf_P(PSTR("EEPROM: Error!\n\r"));
+  }
+  
+  read_RTC();
+  if(RTC.year < 2014 || RTC.year > 2018) {
+    printf_P(PSTR("RTC: Wrong date!\n\r"));
+    // Set Clock
+    set_RTC(get_cdn(19, 5, 2015), get_dtime(8, 01));
+    return;
+  }
+  
+  if(read_DHT11() == false) {
+    printf_P(PSTR("DHT11: Error!\n\r"));
+  }
+  
+  if(read_DS18B20() == false) {
+    printf_P(PSTR("DS18B20: Error!\n\r"));
+  }
+  
+  if(read_BH1750() == false) {
+    printf_P(PSTR("BH1750: Error!\n\r"));
+  }
+
+  relay1.on(); delay(1000); relay1.off();
+  relay2.on(); delay(1000); relay2.off();
+  //relay3.on(); delay(1000); relay3.off();
+  relay4.on(); delay(1000); relay4.off();
+
+  check();
 }
 
 /****************************************************************************/
@@ -369,33 +475,14 @@ void check() {
 /****************************************************************************/
 
 void alarm(uint8_t _mode) {
-  if(DEBUG) printf("ALARM: Info: Alarm raised.\n\r");
+  if(DEBUG) printf_P(PSTR("ALARM: Info: Alarm raised.\n\r"));
 
 }
 
 /****************************************************************************/
 
-bool loadSettings() {
-  EEPROM.readBlock(settingsAdress, settings);
-  if(settings.id == SETTINGS_ID) {
-    if(DEBUG) printf("EEPROM: Info: Load settings.\n\r");
-    return true;
-  }
-  printf("EEPROM: Error: Loading check isn't passed! Can't load settings!\n\r");
-  return false;
-}
-
-/****************************************************************************/
-
-void saveSettings() {
-  EEPROM.writeBlock(settingsAdress, settings);
-  if(DEBUG) printf("EEPROM: Info: Save settings.\n\r");
-}
-
-/****************************************************************************/
-
-void buttonLeftClickEvent() {
-  if(DEBUG) printf("Button LEFT: Info: Click event.\n\r");
+/*void buttonLeftClickEvent() {
+  if(DEBUG) printf_P(PSTR("Button LEFT: Info: Click event.\n\r");
   
   if(lcdMenuEditMode == false) {
   	lcdMenuItem--; // move backward, previous menu
@@ -486,8 +573,8 @@ void buttonLeftClickEvent() {
 
 /****************************************************************************/
 
-void buttonRightClickEvent() {
-  if(DEBUG) printf("Button RIGHT: Info: Click event.\n\r");
+/*void buttonRightClickEvent() {
+  if(DEBUG) printf_P(PSTR("Button RIGHT: Info: Click event.\n\r");
 
   if(lcdMenuEditMode == false) {
   	lcdMenuItem++; // move forward, next menu
@@ -578,8 +665,8 @@ void buttonRightClickEvent() {
 
 /****************************************************************************/
 
-void buttonLeftLongPressEvent() {
-  if(DEBUG) printf("Button LEFT: Info: LongPress event.\n\r");
+/*void buttonLeftLongPressEvent() {
+  if(DEBUG) printf_P(PSTR("Button LEFT: Info: LongPress event.\n\r");
 
   if(lcdMenuEditMode == false) {
   	lcdMenuEditMode = true;
@@ -604,16 +691,16 @@ void buttonLeftLongPressEvent() {
 
 /****************************************************************************/
 
-void buttonRightLongPressEvent() {
-  if(DEBUG) printf("Button RIGHT: Info: LongPress event.\n\r");
+/*void buttonRightLongPressEvent() {
+  if(DEBUG) printf_P(PSTR("Button RIGHT: Info: LongPress event.\n\r");
 
   buttonLeftLongPressEvent(); 
 };
 
 /****************************************************************************/
 
-void lcdShowMenuScreen() {
-  if(DEBUG) printf("LCD1609: Info: Show menu screen #%d.\n\r", lcdMenuItem);
+/*void lcdShowMenuScreen() {
+  if(DEBUG) printf_P(PSTR("LCD1609: Info: Show menu screen #%d.\n\r", lcdMenuItem);
   lcd.clear();
   switch (lcdMenuItem) {
     case HOME:
@@ -690,8 +777,8 @@ void lcdShowMenuScreen() {
 
 /****************************************************************************/
 
-uint8_t lcdShowEditScreen() {
-  if(DEBUG) printf("LCD1609: Info: Show edit screen #%d with cursor: %d.\n\r", 
+/*uint8_t lcdShowEditScreen() {
+  if(DEBUG) printf_P(PSTR("LCD1609: Info: Show edit screen #%d with cursor: %d.\n\r", 
     lcdMenuItem, lcdEditCursor);
   lcd.clear();
   switch (lcdMenuItem) {
@@ -798,9 +885,9 @@ uint8_t lcdShowEditScreen() {
 
 /****************************************************************************/
 
-void lcdBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
+/*void lcdBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
   if(lcdBlink) {
-    if(DEBUG) printf("LCD1609: Info: Blink for: %d\n\r", _end-_start+1); 
+    if(DEBUG) printf_P(PSTR("LCD1609: Info: Blink for: %d\n\r", _end-_start+1); 
     
     while(_start <= _end) {
       lcd.setCursor(_row, _start); lcd.print(" ");
@@ -814,9 +901,10 @@ void lcdBlink(uint8_t _row, uint8_t _start, uint8_t _end) {
 
 /****************************************************************************/
 
-void lcdUpdate() {
+/*void lcdUpdate() {
   if(states[WARNING] != NO_WARNING) {
     lcdShowWarningScreen();	
+    return;
   }
 
   if(lcdMenuEditMode) {
@@ -828,10 +916,49 @@ void lcdUpdate() {
 
 /****************************************************************************/
 
-void lcdShowWarningScreen() {
+/*void lcdShowWarningScreen() {
   switch (states[WARNING]) {
-    case 1:
-
-	return;
+    case WARNING_NO_WATER:
+      fprintf(&lcdout, "No water! :("); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Can’t misting!");
+      lcdBlink(1, 0, 13);
+	    return;
+    case WARNING_SUBSTRATE_FULL:
+      fprintf(&lcdout, "Substrate tank"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "is full! :)");
+      return;
+    case WARNING_SUBSTRATE_LOW:
+      fprintf(&lcdout, "Low substrate!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, ":( Please add.");
+      return;
+    case WARNING_NO_SUBSTRATE:
+      fprintf(&lcdout, "Can't watering!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Plants could die");
+      lcdBlink(0, 0, 14);
+      return;
+    case WARNING_DONE:
+      fprintf(&lcdout, "Watering done!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, ":) wait... 10m");
+      return;
+    case WARNING_WATERING:
+      fprintf(&lcdout, "Watering..."); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Please wait.");
+      return;
+    case WARNING_MISTING:
+      fprintf(&lcdout, "Misting..."); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Please wait.");
+      return;
+    case WARNING_TEMPERATURE_COLD:
+      fprintf(&lcdout, "Is too cold"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "for plants! :(");
+      lcdBlink(0, 0, 10);
+      return;
+    case WARNING_SUBSTRATE_COLD:
+      fprintf(&lcdout, "Substrate is"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "too cold! :O");
+      lcdBlink(1, 10, 11);
+      return;
   }  
 };
+
+/****************************************************************************/
