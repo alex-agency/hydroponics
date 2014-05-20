@@ -8,12 +8,11 @@
 #include "timer.h"
 #include "DS1307new.h"
 #include "BH1750.h"
-#include "SeeeduinoRelay.h"
 #include "EEPROMex.h"
 //#include "myLCDPanel.h"
 
 // Debug info
-#define DEBUG   true
+#define DEBUG  true
 
 // Declare DHT11 sensor digital pin
 #define DHT11PIN  3
@@ -50,20 +49,18 @@ BH1750 lightMeter;
 #define LIGHT  "light"
 
 // Declare Relays pins
-#define RELAY1PIN  4
-#define RELAY2PIN  5
-//#define RELAY2PIN  6
-#define RELAY4PIN  7
-// Declare Relays
-SeeeduinoRelay relay1 = SeeeduinoRelay(1,LOW); 
-SeeeduinoRelay relay2 = SeeeduinoRelay(2,LOW);
-//SeeeduinoRelay relay3 = SeeeduinoRelay(3,LOW); 
-SeeeduinoRelay relay4 = SeeeduinoRelay(4,LOW);
-// Declare Relays keys
+#define PUMP_1PIN  4
+#define PUMP_2PIN  5
+//#define PUMP_3PIN  6
+#define LAMPPIN  7
+// Declare Relays state map keys
 #define PUMP_1  "pump-1"
 #define PUMP_2  "pump-2"
 //#define PUMP_3  "pump-3"
 #define LAMP  "lamp"
+// Declare Relays state map values
+#define RELAY_OFF  1
+#define RELAY_ON  0
 
 // Declare Warning status state map key
 #define WARNING  "warning"
@@ -116,8 +113,8 @@ struct SettingsStruct {
 //myLCDPanel myLCD;
 
 // Declare delay managers, ms
-timer_t slow_timer(30000);
-timer_t fast_timer(1000);
+timer_t slow_timer(15000);
+timer_t fast_timer(10000);
 
 //
 // Setup
@@ -144,10 +141,10 @@ void setup()
   // Shift NV-RAM address 0x08 for RTC
   //RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
 
-  // initialize sensors pins with internal pullup resistor
+  // Initialize sensors pins with internal pull-up
   pinMode(FULL_TANKPIN, INPUT_PULLUP);
   pinMode(DONEPIN, INPUT_PULLUP);
-  pinMode(WATER_ENOUGHPIN, INPUT_PULLUP);
+  pinMode(WATER_ENOUGHPIN, INPUT); // no pull-up for A6 and A7
 
   // check connected devices
   system_check();
@@ -162,7 +159,6 @@ void loop()
     read_DHT11();
     read_DS18B20();
     read_BH1750();
-    read_relays();
 
     // check values
     check();
@@ -287,19 +283,38 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
 
 /****************************************************************************/
 
-void read_relays() {
-  states[PUMP_1] = relay1.isRelayOn();
-  if(DEBUG) printf_P(PSTR("PUMP_1: Info: Relay state: %d.\n\r"), states[PUMP_1]);
-
-  states[PUMP_2] = relay2.isRelayOn();
-  if(DEBUG) printf_P(PSTR("PUMP_2: Info: Relay state: %d.\n\r"), states[PUMP_2]);
-
-  // reserved for upgrade
-  //states[PUMP_3] = relay3.isRelayOn();
-  //if(DEBUG) printf_P(PSTR("PUMP_3: Info: Relay state: %d.\n\r"), states[PUMP_3]);
-
-  states[LAMP] = relay4.isRelayOn();
-  if(DEBUG) printf_P(PSTR("LAMP: Info: Relay state: %d.\n\r"), states[LAMP]);
+void relay(const char* relay, int state) {
+  // initialize relays pin
+  pinMode(PUMP_1PIN, OUTPUT);
+  pinMode(PUMP_2PIN, OUTPUT);
+  //pinMode(PUMP_3PIN, OUTPUT);
+  pinMode(LAMPPIN, OUTPUT);
+  // turn on/off
+  if(strcmp(relay, PUMP_1) == 0) {
+    digitalWrite(PUMP_1PIN, state);
+  } 
+  else if(strcmp(relay, PUMP_2) == 0) {
+    digitalWrite(PUMP_2PIN, state);
+  } 
+  //else if(strcmp(relay, PUMP_3) == 0) {
+  //  digitalWrite(PUMP_3PIN, state);
+  //}
+  else if(strcmp(relay, LAMP) == 0) {
+    digitalWrite(LAMPPIN, state);
+  }
+  else {
+    printf("RELAY: Error: '%s' is unknown!\n\r", relay);
+    return;
+  }
+  // save states
+  if(state == RELAY_ON) {
+    if(DEBUG) printf("RELAY: Info: '%s' is enabled.\n\r", relay);
+    states[relay] = true;
+  } 
+  else if(state == RELAY_OFF) {
+    if(DEBUG) printf("RELAY: Info: '%s' is disabled.\n\r", relay);
+    states[relay] = false;
+  }
 }
 
 /****************************************************************************/
@@ -377,11 +392,6 @@ void system_check() {
   if(read_BH1750() == false) {
     printf_P(PSTR("BH1750: Error!\n\r"));
   }
-
-  relay1.on(); delay(1000); relay1.off();
-  relay2.on(); delay(1000); relay2.off();
-  //relay3.on(); delay(1000); relay3.off();
-  relay4.on(); delay(1000); relay4.off();
 
 }
 

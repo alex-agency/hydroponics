@@ -37,6 +37,8 @@ uint8_t const CLOCK = 14;
 class MyLCDPanel 
 {
 public:
+  OneButton leftButton;
+  OneButton rightButton;
 
   MyLCDPanel( uint8_t _left_pin, uint8_t _right_pin );
 
@@ -49,10 +51,14 @@ public:
   uint8_t editMenu( void );
 
   void showWarning( void );
+  
+  void leftButtonClick( void );
+
+  void rightButtonClick( void );
+
+  void leftButtonLongPress( void );
 
 private:
-  OneButton& leftButton;
-  OneButton& rightButton;
   uint8_t left_pin; 
   uint8_t right_pin;
   uint8_t menuItem = HOME;
@@ -61,12 +67,6 @@ private:
   bool blink = false;
 
   bool doBlink(uint8_t _row, uint8_t _start, uint8_t _end);
-
-  void buttonLeftClick( void );
-
-  void buttonRightClick( void );
-
-  void buttonLeftLongPress( void );
 };
 
 #endif // __MYLCDPANEL_H__

@@ -5,15 +5,11 @@
 // Delay manager in ms
 timer_t lcd_timer(500);
 
+OneButton leftButton(4, true);
+OneButton rightButton(5, true);
+
 // Debug info
-#define DEBUG 		true
-
-/****************************************************************************/
-
-MyLCDPanel::MyLCDPanel( uint8_t _left_pin, uint8_t _right_pin ) {
-  leftButton(_left_pin, true);
-  rightButton(_right_pin, true);
-}
+#define DEBUG  true
 
 /****************************************************************************/
 
