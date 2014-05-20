@@ -9,7 +9,7 @@
 #include "DS1307new.h"
 #include "BH1750.h"
 #include "EEPROMex.h"
-//#include "myLCDPanel.h"
+#include "myLCDPanel.h"
 
 // Debug info
 #define DEBUG  true
@@ -64,17 +64,17 @@ BH1750 lightMeter;
 
 // Declare Warning status state map key
 #define WARNING  "warning"
-// Declare Warning variables
-uint8_t const NO_WARNING = 0;
-uint8_t const WARNING_NO_WATER = 1;
-uint8_t const WARNING_SUBSTRATE_FULL = 2;
-uint8_t const WARNING_SUBSTRATE_LOW = 3;
-uint8_t const WARNING_NO_SUBSTRATE = 4;
-uint8_t const WARNING_DONE = 5;
-uint8_t const WARNING_WATERING = 6;
-uint8_t const WARNING_MISTING = 7;
-uint8_t const WARNING_TEMPERATURE_COLD = 8;
-uint8_t const WARNING_SUBSTRATE_COLD = 9;
+// Declare Warning status state map values
+#define NO_WARNING  0
+#define WARNING_NO_WATER  1
+#define WARNING_SUBSTRATE_FULL  2
+#define WARNING_SUBSTRATE_LOW  3
+#define WARNING_NO_SUBSTRATE  4
+#define WARNING_DONE  5
+#define WARNING_WATERING  6
+#define WARNING_MISTING  7
+#define WARNING_TEMPERATURE_COLD  8
+#define WARNING_SUBSTRATE_COLD  9
 
 // Declare state map
 struct comparator {
@@ -110,7 +110,7 @@ struct SettingsStruct {
 }, memory;
 
 // Declare LCD panel with buttons
-//myLCDPanel myLCD;
+MyLCDPanel myLCD;
 
 // Declare delay managers, ms
 timer_t slow_timer(15000);
@@ -148,6 +148,13 @@ void setup()
 
   // check connected devices
   system_check();
+
+
+  myLCD.attachShowMenu( lcdShowMenu );
+}
+
+uint8_t lcdShowMenu(uint8_t _a) {
+  return _a;
 }
 
 //
