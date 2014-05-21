@@ -110,7 +110,23 @@ struct SettingsStruct {
 }, memory;
 
 // Declare LCD panel with buttons
-MyLCDPanel myLCD;
+LCDPanel lcdPanel;
+// Declare LCD menu items
+#define HOME  0
+#define WATTERING_DAY  1
+#define WATTERING_NIGHT  2
+#define WATTERING_SUNRISE  3
+#define MISTING_DAY  4
+#define MISTING_NIGHT  5
+#define MISTING_SUNRISE  6
+#define DAY_TIME  7
+#define NIGHT_TIME  8
+#define LIGHT_THRESHOLD  9
+#define LIGHT_DAY  10
+#define HUMIDITY_THRESHOLD  11
+#define T_OUTSIDE_THRESHOLD  12
+#define T_SUBSTRATE_THRESHOLD  13
+#define CLOCK  14
 
 // Declare delay managers, ms
 timer_t slow_timer(15000);
@@ -150,12 +166,16 @@ void setup()
   system_check();
 
 
-  myLCD.attachShowMenu( lcdShowMenu );
+  lcdPanel.attachShowMenu( lcdShowMenu );
+  lcdPanel.attachLeftClick( leftButtonClick );
 }
 
 uint8_t lcdShowMenu(uint8_t _a) {
   return _a;
 }
+
+void leftButtonClick() {
+};
 
 //
 // Loop
