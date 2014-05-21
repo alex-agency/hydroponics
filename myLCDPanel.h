@@ -18,10 +18,6 @@ static int lcd_putc(char c, FILE *) {
 };
 static FILE lcdout = {0};
 
-// Declare buttons
-OneButton leftButton(4, true); // A4 pin
-OneButton rightButton(5, true); // A5 pin
-
 // Delay manager in ms
 timer_t lcd_timer(500);
 
@@ -34,7 +30,8 @@ class LCDPanel
   public:
     typedef uint8_t (*callback)(uint8_t _item);
 
-    //LCDPanel( uint8_t _leftPin, uint8_t _rightPin ): {}
+    LCDPanel( uint8_t _leftButtonPin, uint8_t _rightButtonPin ): 
+      leftButton(_leftButtonPin, true), rightButton(_rightButtonPin, true) {}
 
     void begin( void )
     {
@@ -91,13 +88,9 @@ class LCDPanel
       _rightClickFunc = _func;
     };
 
-    void attachLongPress(callbackFunction _func) {
-      _longPressFunc = _func;
-    };
-
     bool doBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
       if(blink) {
-        //if(DEBUG) printf_P(PSTR("LCD1609: Info: Blink for: %d\n\r", _end-_start+1); 
+        if(DEBUG) printf_P(PSTR("LCD1609: Info: Blink for: %d\n\r", _end-_start+1); 
         
         while(_start <= _end) {
           lcd.setCursor(_row, _start); lcd.print(" ");
@@ -113,9 +106,10 @@ class LCDPanel
     callback _showMenuFunc;
     callback _editMenuFunc;
     callback _warningFunc;
+    OneButton leftButton;
+    OneButton rightButton;
     callbackFunction _leftClickFunc;
     callbackFunction _rightClickFunc;
-    callbackFunction _longPressFunc;
     static LCDPanel panel;
     uint8_t menuItem;
     bool menuEditMode;
@@ -134,8 +128,27 @@ class LCDPanel
     }
 
     static void longPress() {
+      if(DEBUG) printf_P(PSTR("LCD button: Info: LongPress event.\n\r");
 
-      if(panel._longPressFunc) panel._longPressFunc();
+      if(menuEditMode == false) {
+        menuEditMode = true;
+        editCursor = editMenu();
+        return;
+      }
+
+      if(editCursor != 0) {
+        editCursor--; // move to next edit field
+        editCursor = editMenu();
+        return;
+      }
+
+      menuEditMode = false;
+      if(menuItem == CLOCK) {
+        RTC.setTime();
+        RTC.startClock();
+      }
+      showMenu(); 
+      return;
     }
 };
 

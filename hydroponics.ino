@@ -109,8 +109,8 @@ struct SettingsStruct {
   SETTINGS_ID
 }, memory;
 
-// Declare LCD panel with buttons
-LCDPanel lcdPanel;
+// Declare LCD panel with buttons pins
+LCDPanel lcdPanel(A4, A5);
 // Declare LCD menu items
 #define HOME  0
 #define WATTERING_DAY  1
