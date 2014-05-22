@@ -75,6 +75,10 @@ BH1750 lightMeter;
 #define WARNING_MISTING  7
 #define WARNING_TEMPERATURE_COLD  8
 #define WARNING_SUBSTRATE_COLD  9
+#define WARNING_EEPROM  10
+#define WARNING_DHT11  11
+#define WARNING_DS18B20  12
+#define WARNING_BH1750  13
 
 // Declare state map
 struct comparator {
@@ -166,7 +170,6 @@ void setup()
   lcdPanel.attachLeftClick(lcdLeftButtonClick);
   lcdPanel.attachRightClick(lcdRightButtonClick);
   lcdPanel.attachLongPress(lcdButtonLongPress);
-  lcdPanel.attachWarning(lcdWarning);
   lcdPanel.attachEditMenu(lcdEditMenu);
   lcdPanel.attachShowMenu(lcdShowMenu);
 
@@ -198,7 +201,7 @@ void loop()
     read_sensors();
   }
 
-  if( warningItem == NO_WARNING ) {
+  if( states[WARNING] == NO_WARNING ) {
     // update LCD panel
     lcdPanel.update();    
   } else {
@@ -401,24 +404,33 @@ bool saveSettings() {
 void system_check() {
   if(eeprom_ok == false) {
     printf_P(PSTR("EEPROM: Error!\n\r"));
+    states[WARNING] = WARNING_EEPROM;
+    return;
   }
   
   read_RTC();
   if(RTC.year < 2014 || RTC.year > 2018) {
     printf_P(PSTR("RTC: Wrong date!\n\r"));
+    lcdPanel.editMenu(CLOCK, 0);
     return;
   }
   
   if(read_DHT11() == false) {
     printf_P(PSTR("DHT11: Error!\n\r"));
+    states[WARNING] = WARNING_DHT11;
+    return;
   }
   
   if(read_DS18B20() == false) {
     printf_P(PSTR("DS18B20: Error!\n\r"));
+    states[WARNING] = WARNING_DS18B20;
+    return;
   }
   
   if(read_BH1750() == false) {
     printf_P(PSTR("BH1750: Error!\n\r"));
+    states[WARNING] = WARNING_BH1750;
+    return;
   }
 
 }
@@ -439,9 +451,9 @@ void alarm(uint8_t _mode) {
 
 /****************************************************************************/
 
-void lcdShowMenu(uint8_t _menuItem) {
+uint8_t lcdShowMenu(uint8_t _menuItem) {
   if(DEBUG) 
-    printf_P(PSTR("LCD Panel: Info: Show menu calback: Menu #%d.\n\r", _menuItem);
+    printf_P(PSTR("LCD Panel: Info: Show menu calback: Menu #%d.\n\r"), _menuItem);
 
   switch (_menuItem) {
     case HOME:
@@ -450,77 +462,78 @@ void lcdShowMenu(uint8_t _menuItem) {
       fprintf(&lcdout, "tIn %dC, tOut %dC, Hum. %d%, Light %d lux", 
       states[T_INSIDE], states[T_OUTSIDE], states[HUMIDITY], states[LIGHT]);
       lcdPanel.doBlink(1, 13, 13);
-      return;
+      break;
     case WATTERING_DAY:
       fprintf(&lcdout, "Watering daytime"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringDayPeriod);
-      return;
+      break;
     case WATTERING_NIGHT:
       fprintf(&lcdout, "Watering night"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringNightPeriod);
-      return;
+      break;
     case WATTERING_SUNRISE:
       fprintf(&lcdout, "Watering sunrise"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringSunrisePeriod);
-      return;
+      break;
     case MISTING_DAY:
       fprintf(&lcdout, "Misting daytime"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.mistingDayPeriod);
-      return;
+      break;
     case MISTING_NIGHT:
       fprintf(&lcdout, "Misting night"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.mistingNightPeriod);
-      return;
+      break;
     case MISTING_SUNRISE:
       fprintf(&lcdout, "Misting sunrise"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.mistingSunrisePeriod);
-      return;
+      break;
     case DAY_TIME:
       fprintf(&lcdout, "Day time"); lcd.setCursor(0,1);
       fprintf(&lcdout, "from %dh to %dh", 
         settings.daytimeFrom, settings.daytimeTo);
-      return;
+      break;
     case NIGHT_TIME:
       fprintf(&lcdout, "Night time"); lcd.setCursor(0,1);
       fprintf(&lcdout, "from %dh to %dh", 
         settings.nighttimeFrom, settings.nighttimeTo);
-      return;
+      break;
     case LIGHT_THRESHOLD:
       fprintf(&lcdout, "Light on when"); lcd.setCursor(0,1);
       fprintf(&lcdout, "lower %d lux", settings.lightThreshold);
-      return;
+      break;
     case LIGHT_DAY:
       fprintf(&lcdout, "Light day"); lcd.setCursor(0,1);
       fprintf(&lcdout, "duration %dh", settings.lightDayDuration);
-      return;
+      break;
     case HUMIDITY_THRESHOLD:
       fprintf(&lcdout, "Humidity not"); lcd.setCursor(0,1);
       fprintf(&lcdout, "less than %d%", settings.humidThreshold);
-      return;
+      break;
     case T_OUTSIDE_THRESHOLD:
       fprintf(&lcdout, "Temperature not"); lcd.setCursor(0,1);
       fprintf(&lcdout, "less than %dC", settings.tempThreshold);
-      return;
+      break;
     case T_SUBSTRATE_THRESHOLD:
       fprintf(&lcdout, "Temperature not"); lcd.setCursor(0,1);
       fprintf(&lcdout, "less than %dC", settings.tempSubsThreshold);
-      return;
+      break;
     case CLOCK:
       fprintf(&lcdout, "Current time"); lcd.setCursor(0,1);
       fprintf(&lcdout, "%d:%d %d-%d-%d", RTC.hour, RTC.minute, 
         RTC.day, RTC.month, RTC.year);
-      return;   
+      break;   
     default:
       lcdPanel.showMenu(HOME);
-      return;
+      break;
   }
+  return _menuItem;
 };
 
 /****************************************************************************/
 
 uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
   if(DEBUG) 
-    printf_P(PSTR("LCD Panel: Info: Edit menu calback: Menu #%d, Cursor #%d.\n\r", 
+    printf_P(PSTR("LCD Panel: Info: Edit menu calback: Menu #%d, Cursor #%d.\n\r"), 
       _menuItem, _editCursor);
 
   switch (_menuItem) {
@@ -632,7 +645,7 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
 
 uint8_t lcdLeftButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
   if(DEBUG) 
-    printf_P(PSTR("LCD Panel: Info: Left click callback: Menu #%d, Cursor #%d.\n\r",
+    printf_P(PSTR("LCD Panel: Info: Left click callback: Menu #%d, Cursor #%d.\n\r"),
       _menuItem, _editCursor);
 
   settings_changed = true;
@@ -716,7 +729,7 @@ uint8_t lcdLeftButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
 
 uint8_t lcdRightButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
   if(DEBUG) 
-    printf_P(PSTR("LCD Panel: Info: Right click callback: Menu #%d, Cursor #%d.\n\r",
+    printf_P(PSTR("LCD Panel: Info: Right click callback: Menu #%d, Cursor #%d.\n\r"),
       _menuItem, _editCursor);
   
   settings_changed = true;
@@ -800,7 +813,7 @@ uint8_t lcdRightButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
 /****************************************************************************/
 
 uint8_t lcdButtonLongPress(uint8_t _menuItem) {
-  if(DEBUG) printf_P(PSTR("LCD Panel: Info: LongPress callback: Menu #%d.\n\r",
+  if(DEBUG) printf_P(PSTR("LCD Panel: Info: LongPress callback: Menu #%d.\n\r"),
     _menuItem);
 
   if(_menuItem == CLOCK) {
@@ -813,7 +826,7 @@ uint8_t lcdButtonLongPress(uint8_t _menuItem) {
 /****************************************************************************/
 
 void lcdWarning() {
-  if(DEBUG) printf_P(PSTR("LCD Panel: Info: Show Warning.\n\r");
+  if(DEBUG) printf_P(PSTR("LCD Panel: Info: Show Warning.\n\r"));
 
   // not fast update lcd
   delay(200);
@@ -858,6 +871,26 @@ void lcdWarning() {
       fprintf(&lcdout, "Substrate is"); lcd.setCursor(0,1);
       fprintf(&lcdout, "too cold! :O");
       lcdPanel.doBlink(1, 10, 11);
+      return;
+    case WARNING_EEPROM:
+      fprintf(&lcdout, "EEPROM ERROR!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Settings reset!");
+      lcdPanel.doBlink(1, 0, 15);
+      return;
+    case WARNING_DHT11:
+      fprintf(&lcdout, "DHT11 ERROR!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Check connection");
+      lcdPanel.doBlink(1, 0, 15);
+      return;
+    case WARNING_DS18B20:
+      fprintf(&lcdout, "DS18B20 ERROR!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Check connection");
+      lcdPanel.doBlink(1, 0, 15);
+      return;
+    case WARNING_BH1750:
+      fprintf(&lcdout, "BH1750 ERROR!"); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Check connection");
+      lcdPanel.doBlink(1, 0, 15);
       return;
   }  
 }

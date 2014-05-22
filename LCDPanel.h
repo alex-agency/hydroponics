@@ -28,7 +28,8 @@ timer_t lcd_timer(500);
 class LCDPanel 
 {
   public:
-    typedef uint8_t (*callback)(uint8_t _item);
+    typedef uint8_t (*callbackOneParam)(uint8_t _a);
+    typedef uint8_t (*callbackTwoParams)(uint8_t _a, uint8_t _b);
 
     LCDPanel( uint8_t _leftButtonPin, uint8_t _rightButtonPin ): 
       leftButton(_leftButtonPin, true), rightButton(_rightButtonPin, true) {}
@@ -53,7 +54,7 @@ class LCDPanel
     {
       if( lcd_timer ) {
         if( menuEditMode ) {
-          _editMenuFunc(menuItem);
+          _editMenuFunc(menuItem, editCursor);
         } else {
           _showMenuFunc(menuItem);
         }
@@ -63,23 +64,23 @@ class LCDPanel
       rightButton.tick();
     }
 
-    void attachShowMenu(callback _func) {
+    void attachShowMenu(callbackOneParam _func) {
       _showMenuFunc = _func;
     }
 
-    void attachEditMenu(callback _func) {
+    void attachEditMenu(callbackTwoParams _func) {
       _editMenuFunc = _func;
     }
     
-    void attachLeftClick(callback _func) {
+    void attachLeftClick(callbackTwoParams _func) {
       _leftClickFunc = _func;
     }
 
-    void attachRightClick(callback _func) {
+    void attachRightClick(callbackTwoParams _func) {
       _rightClickFunc = _func;
     }
 
-    void attachLongPress(callback _func) {
+    void attachLongPress(callbackOneParam _func) {
       _longPressFunc = _func;
     }
 
@@ -90,8 +91,8 @@ class LCDPanel
       lcd.clear();
 
       // callback
-      if(panel._showMenuFunc) 
-        panel._showMenuFunc(menuItem);
+      if(_showMenuFunc) 
+        _showMenuFunc(menuItem);
     }
 
     void editMenu(uint8_t _menuItem, uint8_t _editCursor) {    
@@ -104,8 +105,8 @@ class LCDPanel
       lcd.clear();
 
       // callback
-      if(panel._editMenuFunc) 
-        editCursor = panel._editMenuFunc(menuItem, editCursor);
+      if(_editMenuFunc) 
+        editCursor = _editMenuFunc(menuItem, editCursor);
     }
 
     bool doBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
@@ -125,11 +126,11 @@ class LCDPanel
   private:
     OneButton leftButton;
     OneButton rightButton;
-    callback _showMenuFunc;
-    callback _editMenuFunc;
-    callback _leftClickFunc;
-    callback _rightClickFunc;
-    callback _longPressFunc;
+    callbackOneParam _showMenuFunc;
+    callbackTwoParams _editMenuFunc;
+    callbackTwoParams _leftClickFunc;
+    callbackTwoParams _rightClickFunc;
+    callbackOneParam _longPressFunc;
     static LCDPanel panel;
     uint8_t menuItem;
     bool menuEditMode;
@@ -139,53 +140,53 @@ class LCDPanel
     static void leftClick() {
       if(DEBUG) printf_P(PSTR("LCD LEFT button: Info: Click event.\n\r"));
       
-      if(menuEditMode == false) {
+      if(panel.menuEditMode == false) {
         // move backward, previous menu
-        showMenu(--menuItem);
+        panel.showMenu(--panel.menuItem);
         return;   
       }
       // callback
       if(panel._leftClickFunc) 
-        menuItem = panel._leftClickFunc(menuItem, editCursor);
+        panel.menuItem = panel._leftClickFunc(panel.menuItem, panel.editCursor);
 
-      editMenu(menuItem, editCursor);
+      panel.editMenu(panel.menuItem, panel.editCursor);
     }
 
     static void rightClick() {
       if(DEBUG) printf_P(PSTR("LCD RIGHT button: Info: Click event.\n\r"));
 
-      if(menuEditMode == false) {
+      if(panel.menuEditMode == false) {
         // move forward, next menu
-        showMenu(++menuItem);
+        panel.showMenu(++panel.menuItem);
         return;   
       }
       // callback
       if(panel._rightClickFunc) 
-        menuItem = panel._rightClickFunc(menuItem, editCursor);
+        panel.menuItem = panel._rightClickFunc(panel.menuItem, panel.editCursor);
 
-      editMenu(menuItem, editCursor);
+      panel.editMenu(panel.menuItem, panel.editCursor);
     }
 
     static void longPress() {
       if(DEBUG) printf_P(PSTR("LCD buttons: Info: LongPress event.\n\r"));
 
-      if(menuEditMode == false) {
-        menuEditMode = true;
-        editMenu(menuItem, editCursor);
+      if(panel.menuEditMode == false) {
+        panel.menuEditMode = true;
+        panel.editMenu(panel.menuItem, panel.editCursor);
       }
 
-      if(editCursor != 0) {
+      if(panel.editCursor != 0) {
         // move to next edit field
-        editCursor = editMenu(menuItem, --editCursor);
+        panel.editMenu(panel.menuItem, --panel.editCursor);
       } 
       else {
-        menuEditMode = false;
+        panel.menuEditMode = false;
       }
       // callback
       if(panel._longPressFunc) 
-        menuItem = panel._longPressFunc(menuItem);
+        panel.menuItem = panel._longPressFunc(panel.menuItem);
       
-      showMenu(menuItem); 
+      panel.showMenu(panel.menuItem); 
     }
 };
 
