@@ -19,10 +19,10 @@ static int lcd_putc(char c, FILE *) {
 static FILE lcdout = {0};
 
 // Delay manager in ms
-timer_t lcd_timer(500);
+timer_t lcd_timer(3000);
 
 // Debug info
-#define DEBUG  true
+#define DEBUG  false
 
 
 class LCDPanel 

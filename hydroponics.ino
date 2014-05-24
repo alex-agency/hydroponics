@@ -155,7 +155,7 @@ void setup()
   dallas.begin();
 
   // Configure BH1750
-  lightMeter.begin(BH1750_ONE_TIME_HIGH_RES_MODE);
+  lightMeter.begin(BH1750_CONTINUOUS_HIGH_RES_MODE);
 
   // Configure RTC RAM
   // Shift NV-RAM address 0x08 for RTC
@@ -221,7 +221,7 @@ bool read_DHT11() {
       states[HUMIDITY] = DHT11.humidity;
       states[T_OUTSIDE] = DHT11.temperature;
       if(DEBUG) 
-      	printf_P(PSTR("DHT11: Info: Outside sensor values: humidity: %d%, temperature: %dC.\n\r"), 
+      	printf_P(PSTR("DHT11: Info: Outside sensor values: humidity: %d, temperature: %dC.\n\r"), 
       	states[HUMIDITY], states[T_OUTSIDE]);
       return true;
     case DHTLIB_ERROR_CHECKSUM:
