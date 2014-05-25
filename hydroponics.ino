@@ -354,7 +354,10 @@ void read_sensors() {
   states[FULL_TANK] = digitalRead(FULL_TANKPIN);
   states[DONE] = digitalRead(DONEPIN);
 
-  states[WATER_ENOUGH] = analogRead(WATER_ENOUGHPIN);
+  if(analogRead(WATER_ENOUGHPIN) > 150)
+    states[WATER_ENOUGH] =  1;
+  else
+    states[WATER_ENOUGH] =  0;
   if(DEBUG) 
     printf_P(PSTR("SENSORS: Info: Full tank: %d, Wattering done: %d, Water enough: %d.\n\r"), 
       states[FULL_TANK], states[DONE], states[WATER_ENOUGH]);
