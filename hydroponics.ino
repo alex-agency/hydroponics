@@ -32,12 +32,12 @@ DallasTemperature dallas(&oneWire);
 
 // Declare liquid sensors analog pins
 #define S1_SUBSTRATEPIN  A0
-#define S2_WATTERINGPIN  A1
-//#define S3_WATTERINGPIN  A7
+#define S2_WATERINGPIN  A1
+//#define S3_WATERINGPIN  A7
 #define S4_MISTINGPIN  A6
 // Declare liquid sensors state map keys
 #define S1_SUBSTRATE  "s1 substrate"
-#define S2_WATTERING  "s2 wattering"
+#define S2_WATERING  "s2 watering"
 //#define S3_WATTERING  "s3 wattering"
 #define S4_MISTING  "s4 misting"
 // Declare liquid sensors states
@@ -55,13 +55,13 @@ BH1750 lightMeter;
 
 // Declare Relays pins
 #define P1_MISTINGPIN  4
-#define P2_WATTERINGPIN  5
+#define P2_WATERINGPIN  5
 //#define P3_WATTERINGPIN  6
 #define LAMPPIN  7
 // Declare Relays state map keys
 #define P1_MISTING  "p1 misting"
-#define P2_WATTERING  "p2 wattering"
-//#define P3_WATTERING  "p3 wattering"
+#define P2_WATERING  "p2 watering"
+//#define P3_WATERING  "p3 watering"
 #define LAMP  "lamp"
 // Declare Relays state map values
 #define RELAY_OFF  1
@@ -122,9 +122,9 @@ struct SettingsStruct {
 LCDPanel lcdPanel(A4, A5);
 // Declare LCD menu items
 #define HOME  0
-#define WATTERING_DAY  1
-#define WATTERING_NIGHT  2
-#define WATTERING_SUNRISE  3
+#define WATERING_DAY  1
+#define WATERING_NIGHT  2
+#define WATERING_SUNRISE  3
 #define MISTING_DAY  4
 #define MISTING_NIGHT  5
 #define MISTING_SUNRISE  6
@@ -141,8 +141,9 @@ LCDPanel lcdPanel(A4, A5);
 timer_t slow_timer(15000);
 timer_t fast_timer(10000);
 
-// Declare misting start time, ms
-uint32_t misting = 0;
+// Declare start time, ms
+uint32_t start_misting = 0;
+uint32_t start_watering = 0;
 
 //
 // Setup
@@ -172,14 +173,14 @@ void setup()
 
   // Initialize liquid sensors pins with internal pull-up
   pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
-  pinMode(S2_WATTERINGPIN, INPUT_PULLUP);
+  pinMode(S2_WATERINGPIN, INPUT_PULLUP);
   // no pull-up for A6 and A7
   //pinMode(S3_WATTERINGPIN, INPUT);
   pinMode(S4_MISTINGPIN, INPUT);
 
   // initialize relays pins
   pinMode(P1_MISTINGPIN, OUTPUT);
-  pinMode(P2_WATTERINGPIN, OUTPUT);
+  pinMode(P2_WATERINGPIN, OUTPUT);
   //pinMode(P3_WATTERINGPIN, OUTPUT);
   pinMode(LAMPPIN, OUTPUT);
 
@@ -333,8 +334,8 @@ void relay(const char* relay, uint8_t state) {
   if(strcmp(relay, P1_MISTING) == 0) {
     digitalWrite(P1_MISTINGPIN, state);
   } 
-  else if(strcmp(relay, P2_WATTERING) == 0) {
-    digitalWrite(P2_WATTERINGPIN, state);
+  else if(strcmp(relay, P2_WATERING) == 0) {
+    digitalWrite(P2_WATERINGPIN, state);
   } 
   //else if(strcmp(relay, P3_WATTERING) == 0) {
   //  digitalWrite(P3_WATTERINGPIN, state);
@@ -361,7 +362,7 @@ void relay(const char* relay, uint8_t state) {
 
 void read_liquids() {
   states[S1_SUBSTRATE] = digitalRead(S1_SUBSTRATEPIN);
-  states[S2_WATTERING] = digitalRead(S2_WATTERINGPIN);
+  states[S2_WATERING] = digitalRead(S2_WATERINGPIN);
 
   if(analogRead(S4_MISTINGPIN) > 150)
     states[S4_MISTING] =  SENSOR_OFF;
@@ -370,7 +371,7 @@ void read_liquids() {
   
   if(DEBUG) 
     printf_P(PSTR("LIQUIDS: Info: Substrate: %d, Wattering 1: %d, Misting: %d.\n\r"), 
-      states[S1_SUBSTRATE], states[S2_WATTERING], states[S4_MISTING]);
+      states[S1_SUBSTRATE], states[S2_WATERING], states[S4_MISTING]);
 }
 
 /****************************************************************************/
@@ -416,7 +417,7 @@ void doWatering() {
   	return;
   } 
   else {
-    if(states[S2_WATTERING] = SENSOR_ON)
+    if(states[S2_WATERING] = SENSOR_ON)
 
     return;
   }
@@ -528,15 +529,15 @@ uint8_t lcdShowMenu(uint8_t _menuItem) {
       states[T_INSIDE], states[T_OUTSIDE], states[HUMIDITY], states[LIGHT]);
       lcdPanel.doBlink(1, 13, 13);
       break;
-    case WATTERING_DAY:
+    case WATERING_DAY:
       fprintf(&lcdout, "Watering daytime"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringDayPeriod);
       break;
-    case WATTERING_NIGHT:
+    case WATERING_NIGHT:
       fprintf(&lcdout, "Watering night"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringNightPeriod);
       break;
-    case WATTERING_SUNRISE:
+    case WATERING_SUNRISE:
       fprintf(&lcdout, "Watering sunrise"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringSunrisePeriod);
       break;
@@ -602,17 +603,17 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       _menuItem, _editCursor);
 
   switch (_menuItem) {
-    case WATTERING_DAY:
+    case WATERING_DAY:
       fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringDayPeriod);
       lcdPanel.doBlink(1, 6, 8);
       return 0;
-    case WATTERING_NIGHT:
+    case WATERING_NIGHT:
       fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringNightPeriod);
       lcdPanel.doBlink(1, 6, 8);
       return 0;
-    case WATTERING_SUNRISE:
+    case WATERING_SUNRISE:
       fprintf(&lcdout, "Changing period"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %d min", settings.wateringSunrisePeriod);
       lcdPanel.doBlink(1, 6, 8);
@@ -715,13 +716,13 @@ uint8_t lcdLeftButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
 
   settings_changed = true;
   switch (_menuItem) {
-    case WATTERING_DAY:
+    case WATERING_DAY:
       settings.wateringDayPeriod--;
       break;
-    case WATTERING_NIGHT:
+    case WATERING_NIGHT:
       settings.wateringNightPeriod--;
       break;
-    case WATTERING_SUNRISE:
+    case WATERING_SUNRISE:
       settings.wateringSunrisePeriod--;
       break;
     case MISTING_DAY:
@@ -799,13 +800,13 @@ uint8_t lcdRightButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
   
   settings_changed = true;
   switch (_menuItem) {
-    case WATTERING_DAY:
+    case WATERING_DAY:
       settings.wateringDayPeriod++;
       break;
-    case WATTERING_NIGHT:
+    case WATERING_NIGHT:
       settings.wateringNightPeriod++;
       break;
-    case WATTERING_SUNRISE:
+    case WATERING_SUNRISE:
       settings.wateringSunrisePeriod++;
       break;
     case MISTING_DAY:
