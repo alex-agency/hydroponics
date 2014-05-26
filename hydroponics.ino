@@ -30,14 +30,19 @@ DallasTemperature dallas(&oneWire);
 #define T_INSIDE  "t inside"
 #define T_SUBSTRATE  "t substrate"
 
-// Declare sensors analog pins
-#define FULL_TANKPIN  A0
-#define DONEPIN  A1
-#define WATER_ENOUGHPIN  A6
+// Declare liquid sensors analog pins
+#define S1_SUBSTRATEPIN  A0
+#define S2_WATTERINGPIN  A1
+//#define S3_WATTERINGPIN  A7
+#define S4_MISTINGPIN  A6
 // Declare liquid sensors state map keys
-#define FULL_TANK  "full tank"
-#define DONE  "done"
-#define WATER_ENOUGH  "water enough"
+#define S1_SUBSTRATE  "s1 substrate"
+#define S2_WATTERING  "s2 wattering"
+//#define S3_WATTERING  "s3 wattering"
+#define S4_MISTING  "s4 misting"
+// Declare liquid sensors states
+#define SENSOR_OFF  1
+#define SENSOR_ON  0
 
 // Declare RTC state map keys
 #define CDN  "cdn" // days after 2000-01-01
@@ -49,14 +54,14 @@ BH1750 lightMeter;
 #define LIGHT  "light"
 
 // Declare Relays pins
-#define PUMP_1PIN  4
-#define PUMP_2PIN  5
-//#define PUMP_3PIN  6
+#define P1_MISTINGPIN  4
+#define P2_WATTERINGPIN  5
+//#define P3_WATTERINGPIN  6
 #define LAMPPIN  7
 // Declare Relays state map keys
-#define PUMP_1  "pump-1"
-#define PUMP_2  "pump-2"
-//#define PUMP_3  "pump-3"
+#define P1_MISTING  "p1 misting"
+#define P2_WATTERING  "p2 wattering"
+//#define P3_WATTERING  "p3 wattering"
 #define LAMP  "lamp"
 // Declare Relays state map values
 #define RELAY_OFF  1
@@ -89,12 +94,12 @@ struct comparator {
 SimpleMap<const char*, uint8_t, 14, comparator> states;
 
 // Declare EEPROM values
-#define SETTINGS_ID  "hs"
+#define SETTINGS_ID  ":)"
 bool eeprom_ok = false;
 uint16_t eeprom_offset = 0;
 uint8_t eeprom_max_writes = 50;
 bool settings_changed = false;
-// Declare settings structure
+// Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
   uint8_t mistingDayPeriod, mistingNightPeriod, mistingSunrisePeriod;
@@ -113,7 +118,7 @@ struct SettingsStruct {
   SETTINGS_ID
 }, memory;
 
-// Declare LCD panel with buttons pins
+// Declare LCD1609 with buttons pins
 LCDPanel lcdPanel(A4, A5);
 // Declare LCD menu items
 #define HOME  0
@@ -136,6 +141,9 @@ LCDPanel lcdPanel(A4, A5);
 timer_t slow_timer(15000);
 timer_t fast_timer(10000);
 
+// Declare misting start time, ms
+uint32_t misting = 0;
+
 //
 // Setup
 //
@@ -143,6 +151,7 @@ void setup()
 {
   // Configure console
   Serial.begin(57600);
+  // Initialize PSTR
   printf_begin();
 
   // Configure EEPROM
@@ -161,10 +170,18 @@ void setup()
   // Shift NV-RAM address 0x08 for RTC
   //RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
 
-  // Initialize sensors pins with internal pull-up
-  pinMode(FULL_TANKPIN, INPUT_PULLUP);
-  pinMode(DONEPIN, INPUT_PULLUP);
-  pinMode(WATER_ENOUGHPIN, INPUT); // no pull-up for A6 and A7
+  // Initialize liquid sensors pins with internal pull-up
+  pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
+  pinMode(S2_WATTERINGPIN, INPUT_PULLUP);
+  // no pull-up for A6 and A7
+  //pinMode(S3_WATTERINGPIN, INPUT);
+  pinMode(S4_MISTINGPIN, INPUT);
+
+  // initialize relays pins
+  pinMode(P1_MISTINGPIN, OUTPUT);
+  pinMode(P2_WATTERINGPIN, OUTPUT);
+  //pinMode(P3_WATTERINGPIN, OUTPUT);
+  pinMode(LAMPPIN, OUTPUT);
 
   // attach to events
   lcdPanel.attachLeftClick(lcdLeftButtonClick);
@@ -187,10 +204,8 @@ void loop()
     read_DS18B20();
     read_BH1750();
 
-    // check values
-    check();
+    doWork();
 
-    // save to EEPROM
     if( settings_changed && eeprom_ok ) {
       saveSettings();
     }
@@ -198,11 +213,10 @@ void loop()
 
   if( fast_timer ) {
     read_RTC();
-    read_sensors();
+    read_liquids();
   }
 
   if( states[WARNING] == NO_WARNING ) {
-    // update LCD panel
     lcdPanel.update();    
   } else {
     lcdWarning();
@@ -221,7 +235,7 @@ bool read_DHT11() {
       states[HUMIDITY] = DHT11.humidity;
       states[T_OUTSIDE] = DHT11.temperature;
       if(DEBUG) 
-      	printf_P(PSTR("DHT11: Info: Outside sensor values: humidity: %d, temperature: %dC.\n\r"), 
+      	printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
       	states[HUMIDITY], states[T_OUTSIDE]);
       return true;
     case DHTLIB_ERROR_CHECKSUM:
@@ -242,11 +256,11 @@ bool read_DS18B20() {
   dallas.requestTemperatures();
   int value = dallas.getTempCByIndex(0);
   if(value == DEVICE_DISCONNECTED_C) {
-    printf_P(PSTR("DS18B20: Error: Inside sensor communication failed!\n\r"));
+    printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
     return false;
   }
   states[T_INSIDE] = value;
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Temperature inside: %dC.\n\r"), 
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), 
         states[T_INSIDE]);
   
   value = dallas.getTempCByIndex(1);
@@ -255,7 +269,7 @@ bool read_DS18B20() {
     return false;
   }
   states[T_SUBSTRATE] = value;
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Temperature substrate: %dC.\n\r"), 
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), 
   	states[T_SUBSTRATE]);
   return true;
 }
@@ -314,21 +328,16 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
 
 /****************************************************************************/
 
-void relay(const char* relay, int state) {
-  // initialize relays pin
-  pinMode(PUMP_1PIN, OUTPUT);
-  pinMode(PUMP_2PIN, OUTPUT);
-  //pinMode(PUMP_3PIN, OUTPUT);
-  pinMode(LAMPPIN, OUTPUT);
+void relay(const char* relay, uint8_t state) {
   // turn on/off
-  if(strcmp(relay, PUMP_1) == 0) {
-    digitalWrite(PUMP_1PIN, state);
+  if(strcmp(relay, P1_MISTING) == 0) {
+    digitalWrite(P1_MISTINGPIN, state);
   } 
-  else if(strcmp(relay, PUMP_2) == 0) {
-    digitalWrite(PUMP_2PIN, state);
+  else if(strcmp(relay, P2_WATTERING) == 0) {
+    digitalWrite(P2_WATTERINGPIN, state);
   } 
-  //else if(strcmp(relay, PUMP_3) == 0) {
-  //  digitalWrite(PUMP_3PIN, state);
+  //else if(strcmp(relay, P3_WATTERING) == 0) {
+  //  digitalWrite(P3_WATTERINGPIN, state);
   //}
   else if(strcmp(relay, LAMP) == 0) {
     digitalWrite(LAMPPIN, state);
@@ -350,17 +359,68 @@ void relay(const char* relay, int state) {
 
 /****************************************************************************/
 
-void read_sensors() {
-  states[FULL_TANK] = digitalRead(FULL_TANKPIN);
-  states[DONE] = digitalRead(DONEPIN);
+void read_liquids() {
+  states[S1_SUBSTRATE] = digitalRead(S1_SUBSTRATEPIN);
+  states[S2_WATTERING] = digitalRead(S2_WATTERINGPIN);
 
-  if(analogRead(WATER_ENOUGHPIN) > 150)
-    states[WATER_ENOUGH] =  1;
+  if(analogRead(S4_MISTINGPIN) > 150)
+    states[S4_MISTING] =  SENSOR_OFF;
   else
-    states[WATER_ENOUGH] =  0;
+    states[S4_MISTING] =  SENSOR_ON;
+  
   if(DEBUG) 
-    printf_P(PSTR("SENSORS: Info: Full tank: %d, Wattering done: %d, Water enough: %d.\n\r"), 
-      states[FULL_TANK], states[DONE], states[WATER_ENOUGH]);
+    printf_P(PSTR("LIQUIDS: Info: Substrate: %d, Wattering 1: %d, Misting: %d.\n\r"), 
+      states[S1_SUBSTRATE], states[S2_WATTERING], states[S4_MISTING]);
+}
+
+/****************************************************************************/
+
+void doMisting() {
+  uint16_t duration = 3000;
+  
+  if(start_misting == 0) {
+  	relay(P1_MISTING, RELAY_ON);
+  	start_misting = millis();
+  	states[WARNING] = WARNING_MISTING;
+  	if(DEBUG) printf("MISTING: Info: Start.\n\r");
+  	return;
+  } 
+
+  if(start_misting > 0 && (millis() > start_misting + duration)) {
+  	relay(P1_MISTING, RELAY_OFF);
+  	start_misting = -1;
+  	states[WARNING] = NO_WARNING;
+  	if(DEBUG) printf("MISTING: Info: Stop.\n\r");
+  	return;
+  }
+}
+
+/****************************************************************************/
+
+void doWatering() {
+  uint16_t duration = 60000;
+  
+  if(start_watering == 0) {
+  	relay(P2_WATERING, RELAY_ON);
+  	start_watering = millis();
+  	states[WARNING] = WARNING_WATERING;
+  	if(DEBUG) printf("WATERING: Info: Start.\n\r");
+  	return;
+  }
+
+  if(start_watering > 0 && (millis() > start_watering + duration)) {
+  	relay(P2_WATERING, RELAY_OFF);
+  	start_watering = 0;
+  	states[WARNING] = WARNING_NO_SUBSTRATE;
+  	printf("MISTING: Error: No substrate!\n\r");
+  	return;
+  } 
+  else {
+    if(states[S2_WATTERING] = SENSOR_ON)
+
+    return;
+  }
+
 }
 
 /****************************************************************************/
@@ -435,13 +495,15 @@ void system_check() {
     states[WARNING] = WARNING_BH1750;
     return;
   }
-
 }
 
 /****************************************************************************/
 
-void check() {
+void doWork() {
 
+  //doMisting();
+
+  //doWatering();
 
 }
 
