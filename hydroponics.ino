@@ -113,7 +113,7 @@ struct SettingsStruct {
   30, 90, 60,
   13, 16,
   21, 04,
-  800, 14,
+  200, 14,
   40, 20, 20,
   SETTINGS_ID
 }, memory;
@@ -141,9 +141,11 @@ LCDPanel lcdPanel(A4, A5);
 timer_t slow_timer(15000);
 timer_t fast_timer(10000);
 
-// Declare start time, ms
 uint32_t start_misting = 0;
+uint32_t last_misting = 0;
 uint32_t start_watering = 0;
+uint32_t last_watering = 0;
+uint16_t ONE_MINUTE = 60000;
 
 //
 // Setup
@@ -501,10 +503,47 @@ void system_check() {
 /****************************************************************************/
 
 void doWork() {
+  uint32_t now = millis();
 
-  //doMisting();
+  // day time
+  if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
 
-  //doWatering();
+    if(now > last_watering + (settings.wateringDayPeriod * ONE_MINUTE)) {
+      doWatering();
+    }
+
+    if(now > last_misting + (settings.mistingDayPeriod * ONE_MINUTE)) {
+      doMisting();
+    }
+  } else
+  // night time 
+  if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
+
+    if(now > last_watering + (settings.wateringNightPeriod * ONE_MINUTE)) {
+      doWatering();
+    }
+
+    if(now > last_misting + (settings.mistingNightPeriod * ONE_MINUTE)) {
+      doMisting();
+    }
+  } 
+  // sunrise time
+  else {
+
+    if(now > last_watering + (settings.wateringSunrisePeriod * ONE_MINUTE)) {
+      doWatering();
+    }
+
+    if(now > last_misting + (settings.mistingSunrisePeriod * ONE_MINUTE)) {
+      doMisting();
+    }
+  }
+
+  if(states[LIGHT] <= settings.lightThreshold) {
+    relay(LAMP, RELAY_ON);
+  } else {
+    relay(LAMP, RELAY_OFF);
+  }
 
 }
 
