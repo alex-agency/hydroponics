@@ -1,6 +1,7 @@
 // Import libraries
 #include <Wire.h>
 #include "printf.h"
+#include "settings.h"
 #include "OneWire.h"
 #include "DallasTemperature.h"
 #include "dht11.h"
@@ -8,11 +9,14 @@
 #include "timer.h"
 #include "DS1307new.h"
 #include "BH1750.h"
-#include "EEPROMex.h"
 #include "LCDPanel.h"
 
 // Debug info
 #define DEBUG  true
+
+// Declare settings
+Storage storage;
+bool storage_ok;
 
 // Declare DHT11 sensor digital pin
 #define DHT11PIN  3
@@ -22,11 +26,7 @@
 
 // Declare data wire digital pin
 #define ONE_WIRE_BUS  2
-// Setup a oneWire instance to communicate with any OneWire devices
-OneWire oneWire(ONE_WIRE_BUS);
-// Pass our oneWire reference to Dallas Temperature.
-DallasTemperature dallas(&oneWire);
-// Declare DS18B20 sensor state map key
+// Declare DS18B20 sensors state map keys
 #define T_INSIDE  "t inside"
 #define T_SUBSTRATE  "t substrate"
 
@@ -40,16 +40,11 @@ DallasTemperature dallas(&oneWire);
 #define S2_WATERING  "s2 watering"
 //#define S3_WATTERING  "s3 wattering"
 #define S4_MISTING  "s4 misting"
-// Declare liquid sensors states
-#define SENSOR_OFF  1
-#define SENSOR_ON  0
 
 // Declare RTC state map keys
 #define CDN  "cdn" // days after 2000-01-01
 #define DTIME  "dtime" // minutes after 00:00
 
-// Declare BH1750 sensor
-BH1750 lightMeter;
 // Declare BH1750 sensor state map key
 #define LIGHT  "light"
 
@@ -63,9 +58,6 @@ BH1750 lightMeter;
 #define P2_WATERING  "p2 watering"
 //#define P3_WATERING  "p3 watering"
 #define LAMP  "lamp"
-// Declare Relays state map values
-#define RELAY_OFF  1
-#define RELAY_ON  0
 
 // Declare Warning status state map key
 #define WARNING  "warning"
@@ -92,31 +84,6 @@ struct comparator {
   }
 };
 SimpleMap<const char*, uint8_t, 14, comparator> states;
-
-// Declare EEPROM values
-#define SETTINGS_ID  ":)"
-bool eeprom_ok = false;
-uint16_t eeprom_offset = 0;
-uint8_t eeprom_max_writes = 50;
-bool settings_changed = false;
-// Declare structure and default settings
-struct SettingsStruct {
-  uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
-  uint8_t mistingDayPeriod, mistingNightPeriod, mistingSunrisePeriod;
-  uint8_t daytimeFrom, daytimeTo;
-  uint8_t nighttimeFrom, nighttimeTo;
-  uint8_t lightThreshold, lightDayDuration;
-  uint8_t humidThreshold, tempThreshold, tempSubsThreshold;
-  char id[3];
-} settings = { 
-  60, 180, 90,
-  30, 90, 60,
-  13, 16,
-  21, 04,
-  200, 14,
-  40, 20, 20,
-  SETTINGS_ID
-}, memory;
 
 // Declare LCD1609 with buttons pins
 LCDPanel lcdPanel(A4, A5);
@@ -157,34 +124,8 @@ void setup()
   // Initialize PSTR
   printf_begin();
 
-  // Configure EEPROM
-  // prevent to burn EEPROM
-  EEPROM.setMaxAllowedWrites(eeprom_max_writes);
-  // load settings
-  eeprom_ok = loadSettings();
-
-  // Configure DS18B20
-  dallas.begin();
-
-  // Configure BH1750
-  lightMeter.begin(BH1750_CONTINUOUS_HIGH_RES_MODE);
-
-  // Configure RTC RAM
-  // Shift NV-RAM address 0x08 for RTC
-  //RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
-
-  // Initialize liquid sensors pins with internal pull-up
-  pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
-  pinMode(S2_WATERINGPIN, INPUT_PULLUP);
-  // no pull-up for A6 and A7
-  //pinMode(S3_WATTERINGPIN, INPUT);
-  pinMode(S4_MISTINGPIN, INPUT);
-
-  // initialize relays pins
-  pinMode(P1_MISTINGPIN, OUTPUT);
-  pinMode(P2_WATERINGPIN, OUTPUT);
-  //pinMode(P3_WATTERINGPIN, OUTPUT);
-  pinMode(LAMPPIN, OUTPUT);
+  // Load settings
+  storage_ok = storage.load();
 
   // attach to events
   lcdPanel.attachLeftClick(lcdLeftButtonClick);
@@ -209,14 +150,14 @@ void loop()
 
     doWork();
 
-    if( settings_changed && eeprom_ok ) {
-      saveSettings();
+    if( storage.isChanged && storage_ok ) {
+      storage_ok = storage.save();
     }
   }
 
   if( fast_timer ) {
     read_RTC();
-    read_liquids();
+    read_levels();
   }
 
   if( states[WARNING] == NO_WARNING ) {
@@ -230,69 +171,8 @@ void loop()
 
 /****************************************************************************/
 
-bool read_DHT11() {
-  dht11 DHT11;
-  uint8_t state = DHT11.read(DHT11PIN);
-  switch (state) {
-    case DHTLIB_OK:
-      states[HUMIDITY] = DHT11.humidity;
-      states[T_OUTSIDE] = DHT11.temperature;
-      if(DEBUG) 
-      	printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
-      	states[HUMIDITY], states[T_OUTSIDE]);
-      return true;
-    case DHTLIB_ERROR_CHECKSUM:
-      printf_P(PSTR("DHT11: Error: Checksum test failed!: The data may be incorrect!\n\r"));
-      return false;
-    case DHTLIB_ERROR_TIMEOUT: 
-      printf_P(PSTR("DHT11: Error: Timeout occured!: Communication failed!\n\r"));
-      return false;
-    default: 
-      printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
-      return false;
-  }
-}
-
-/****************************************************************************/
-
-bool read_DS18B20() {
-  dallas.requestTemperatures();
-  int value = dallas.getTempCByIndex(0);
-  if(value == DEVICE_DISCONNECTED_C) {
-    printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
-    return false;
-  }
-  states[T_INSIDE] = value;
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), 
-        states[T_INSIDE]);
-  
-  value = dallas.getTempCByIndex(1);
-  if(value == DEVICE_DISCONNECTED_C) {
-    printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
-    return false;
-  }
-  states[T_SUBSTRATE] = value;
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), 
-  	states[T_SUBSTRATE]);
-  return true;
-}
-
-/****************************************************************************/
-
-bool read_BH1750() {
-  uint16_t value = lightMeter.readLightLevel();
-  if(value == 54612) {
-    printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
-    return false;
-  }
-  states[LIGHT] = value;
-  if(DEBUG) printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), states[LIGHT]);
-  return true;
-}
-
-/****************************************************************************/
-
 void read_RTC() {
+  //RTC.setRAM(0, (uint8_t *)0x0000, sizeof(uint16_t));
   //RTC.getRAM(54, (uint8_t *)0xaa55, sizeof(uint16_t));
   RTC.getTime();
   states[CDN] = RTC.cdn;
@@ -331,49 +211,138 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
 
 /****************************************************************************/
 
-void relay(const char* relay, uint8_t state) {
-  // turn on/off
-  if(strcmp(relay, P1_MISTING) == 0) {
-    digitalWrite(P1_MISTINGPIN, state);
-  } 
-  else if(strcmp(relay, P2_WATERING) == 0) {
-    digitalWrite(P2_WATERINGPIN, state);
-  } 
-  //else if(strcmp(relay, P3_WATTERING) == 0) {
-  //  digitalWrite(P3_WATTERINGPIN, state);
-  //}
-  else if(strcmp(relay, LAMP) == 0) {
-    digitalWrite(LAMPPIN, state);
-  }
-  else {
-    printf("RELAY: Error: '%s' is unknown!\n\r", relay);
-    return;
-  }
-  // save states
-  if(state == RELAY_ON) {
-    if(DEBUG) printf("RELAY: Info: '%s' is enabled.\n\r", relay);
-    states[relay] = true;
-  } 
-  else if(state == RELAY_OFF) {
-    if(DEBUG) printf("RELAY: Info: '%s' is disabled.\n\r", relay);
-    states[relay] = false;
+bool read_DHT11() {
+  dht11 DHT11;
+  switch ( DHT11.read(DHT11PIN) ) {
+    case DHTLIB_OK:
+      states[HUMIDITY] = DHT11.humidity;
+      states[T_OUTSIDE] = DHT11.temperature;
+      if(DEBUG) 
+      	printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
+      	states[HUMIDITY], states[T_OUTSIDE]);
+      return true;
+    default: 
+      printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
+      return false;
   }
 }
 
 /****************************************************************************/
 
-void read_liquids() {
-  states[S1_SUBSTRATE] = digitalRead(S1_SUBSTRATEPIN);
-  states[S2_WATERING] = digitalRead(S2_WATERINGPIN);
+bool read_DS18B20() {
+  OneWire oneWire(ONE_WIRE_BUS);
+  DallasTemperature dallas(&oneWire);
+  dallas.begin();
+  dallas.requestTemperatures();
 
-  if(analogRead(S4_MISTINGPIN) > 150)
-    states[S4_MISTING] =  SENSOR_OFF;
-  else
-    states[S4_MISTING] =  SENSOR_ON;
+  int value = dallas.getTempCByIndex(0);
+  if(value == DEVICE_DISCONNECTED_C) {
+    printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
+    return false;
+  }
+  states[T_INSIDE] = value;
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), 
+        states[T_INSIDE]);
   
-  if(DEBUG) 
-    printf_P(PSTR("LIQUIDS: Info: Substrate: %d, Wattering 1: %d, Misting: %d.\n\r"), 
-      states[S1_SUBSTRATE], states[S2_WATERING], states[S4_MISTING]);
+  value = dallas.getTempCByIndex(1);
+  if(value == DEVICE_DISCONNECTED_C) {
+    printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
+    return false;
+  }
+  states[T_SUBSTRATE] = value;
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), 
+  	states[T_SUBSTRATE]);
+  return true;
+}
+
+/****************************************************************************/
+
+bool read_BH1750() {
+  BH1750 lightMeter;
+  lightMeter.begin();
+  states[LIGHT] = lightMeter.readLightLevel();
+
+  if(states[LIGHT] == 54612) {
+    printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
+    return false;
+  }
+  if(DEBUG) printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), states[LIGHT]);
+  return true;
+}
+
+/****************************************************************************/
+
+void read_levels() {
+  pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
+  if(digitalRead(S1_SUBSTRATEPIN) == 0) {
+  	if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is full.\n\r"));
+  	states[S1_SUBSTRATE] = true;
+  } else {
+  	if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is not full!\n\r"));
+  	states[S1_SUBSTRATE] = false;
+  }
+
+  pinMode(S2_WATERINGPIN, INPUT_PULLUP);
+  if(digitalRead(S2_WATERINGPIN) == 0) {
+  	if(DEBUG) printf_P(PSTR("LEVELS: Info: Watering has done.\n\r"));
+  	states[S2_WATERING] = true;
+  } else {
+  	if(DEBUG) printf_P(PSTR("LEVELS: Info: No watering.\n\r"));
+  	states[S2_WATERING] = false;
+  }
+
+  // no pull-up for A6 and A7
+  pinMode(S4_MISTINGPIN, INPUT);
+  if(analogRead(S4_MISTINGPIN) < 150) {
+    if(DEBUG) printf_P(PSTR("LEVELS: Info: Misting water sensor active.\n\r"));
+  	states[S4_MISTING] = true;
+  } else {
+  	if(DEBUG) printf_P(PSTR("LEVELS: Info: No water for misting!\n\r"));
+  	states[S4_MISTING] = false;
+  }
+}
+
+/****************************************************************************/
+
+void relayOn(const char* relay) {
+  bool status = relays(relay, 0); // 0 is ON
+  if(status) {
+    if(DEBUG) printf("RELAY: Info: '%s' is enabled.\n\r", relay);
+    states[relay] = true;
+  }
+}
+
+void relayOff(const char* relay) {
+  bool status = relays(relay, 1); // 1 is OFF
+  if(status) {
+    if(DEBUG) printf("RELAY: Info: '%s' is disabled.\n\r", relay);
+    states[relay] = false;
+  }
+}
+
+bool relays(const char* relay, uint8_t state) {
+  if(strcmp(relay, P1_MISTING) == 0) {
+  	pinMode(P1_MISTINGPIN, OUTPUT);
+    digitalWrite(P1_MISTINGPIN, state);
+    return true;
+  } 
+  if(strcmp(relay, P2_WATERING) == 0) {
+    pinMode(P2_WATERINGPIN, OUTPUT);  	
+    digitalWrite(P2_WATERINGPIN, state);
+    return true;
+  } 
+  //if(strcmp(relay, P3_WATERING) == 0) {
+  //  pinMode(P3_WATTERINGPIN, OUTPUT);
+  //  digitalWrite(P3_WATTERINGPIN, state);
+  //  return true;
+  //}
+  if(strcmp(relay, LAMP) == 0) {
+  	pinMode(LAMPPIN, OUTPUT);
+    digitalWrite(LAMPPIN, state);
+    return true;
+  }
+  printf("RELAY: Error: '%s' is unknown!\n\r", relay);
+  return false;
 }
 
 /****************************************************************************/
@@ -382,7 +351,7 @@ void doMisting() {
   uint16_t duration = 3000;
   
   if(start_misting == 0) {
-  	relay(P1_MISTING, RELAY_ON);
+  	relayOn(P1_MISTING);
   	start_misting = millis();
   	states[WARNING] = WARNING_MISTING;
   	if(DEBUG) printf("MISTING: Info: Start.\n\r");
@@ -390,7 +359,7 @@ void doMisting() {
   } 
 
   if(start_misting > 0 && (millis() > start_misting + duration)) {
-  	relay(P1_MISTING, RELAY_OFF);
+  	relayOff(P1_MISTING);
   	start_misting = -1;
   	states[WARNING] = NO_WARNING;
   	if(DEBUG) printf("MISTING: Info: Stop.\n\r");
@@ -404,7 +373,7 @@ void doWatering() {
   uint16_t duration = 60000;
   
   if(start_watering == 0) {
-  	relay(P2_WATERING, RELAY_ON);
+  	relayOn(P2_WATERING);
   	start_watering = millis();
   	states[WARNING] = WARNING_WATERING;
   	if(DEBUG) printf("WATERING: Info: Start.\n\r");
@@ -412,14 +381,14 @@ void doWatering() {
   }
 
   if(start_watering > 0 && (millis() > start_watering + duration)) {
-  	relay(P2_WATERING, RELAY_OFF);
+  	relayOff(P2_WATERING);
   	start_watering = 0;
   	states[WARNING] = WARNING_NO_SUBSTRATE;
   	printf("MISTING: Error: No substrate!\n\r");
   	return;
   } 
   else {
-    if(states[S2_WATERING] = SENSOR_ON)
+    //if(states[S2_WATERING] = SENSOR_ON)
 
     return;
   }
@@ -428,47 +397,8 @@ void doWatering() {
 
 /****************************************************************************/
 
-bool loadSettings() {
-  // search through the EEPROM for a valid structure
-  for ( ; eeprom_offset < EEPROMSizeATmega328-sizeof(memory) ; ++eeprom_offset) {    
-    //read a struct sized block from the EEPROM
-    EEPROM.readBlock(eeprom_offset, memory);
-    if (strcmp(memory.id, SETTINGS_ID) == 0) {
-      // load settings        
-      settings = memory;
-      if(DEBUG) printf_P(PSTR("EEPROM: Info: Settings loaded.\n\r"));
-      return true;
-    }
-  }
-  printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
-  return false;
-}
-
-/****************************************************************************/
-
-bool saveSettings() {
-  // move on one position
-  ++eeprom_offset;
-  // if writing at offset would mean going outside the EEPROM limit
-  if(eeprom_offset > EEPROMSizeATmega328-sizeof(settings)) 
-    eeprom_offset = 0;
-
-  int writeCount = EEPROM.updateBlock(eeprom_offset, settings);
-  
-  if(writeCount > 0) {
-    if(DEBUG) printf_P(PSTR("EEPROM: Info: Saved settings at address %d with size %d.\n\r"),
-    eeprom_offset, writeCount);
-      return true;
-  }
-  printf_P(PSTR("EEPROM: Error: Can't save settings! Stored %d of %d at address %d.\n\r"),
-    writeCount, sizeof(settings), eeprom_offset);
-  return false;
-}
-
-/****************************************************************************/
-
 void system_check() {
-  if(eeprom_ok == false) {
+  if(storage_ok == false) {
     printf_P(PSTR("EEPROM: Error!\n\r"));
     states[WARNING] = WARNING_EEPROM;
     return;
@@ -509,48 +439,41 @@ void doWork() {
   if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
 
     if(now > last_watering + (settings.wateringDayPeriod * ONE_MINUTE)) {
-      doWatering();
+      //doWatering();
     }
 
     if(now > last_misting + (settings.mistingDayPeriod * ONE_MINUTE)) {
-      doMisting();
+      //doMisting();
     }
   } else
   // night time 
   if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
 
     if(now > last_watering + (settings.wateringNightPeriod * ONE_MINUTE)) {
-      doWatering();
+      //doWatering();
     }
 
     if(now > last_misting + (settings.mistingNightPeriod * ONE_MINUTE)) {
-      doMisting();
+      //doMisting();
     }
   } 
   // sunrise time
   else {
 
     if(now > last_watering + (settings.wateringSunrisePeriod * ONE_MINUTE)) {
-      doWatering();
+      //doWatering();
     }
 
     if(now > last_misting + (settings.mistingSunrisePeriod * ONE_MINUTE)) {
-      doMisting();
+      //doMisting();
     }
   }
 
   if(states[LIGHT] <= settings.lightThreshold) {
-    relay(LAMP, RELAY_ON);
+    relayOn(LAMP);
   } else {
-    relay(LAMP, RELAY_OFF);
+    relayOff(LAMP);
   }
-
-}
-
-/****************************************************************************/
-
-void alarm(uint8_t _mode) {
-  if(DEBUG) printf_P(PSTR("ALARM: Info: Alarm raised.\n\r"));
 
 }
 
@@ -564,7 +487,7 @@ uint8_t lcdShowMenu(uint8_t _menuItem) {
     case HOME:
       fprintf(&lcdout, "Hydroponic %d:%d", RTC.hour, RTC.minute); 
       lcd.setCursor(0,1);
-      fprintf(&lcdout, "tIn %dC, tOut %dC, Hum. %d%, Light %d lux", 
+      fprintf(&lcdout, "tIn %dC, tOut %dC, Hum. %d, Light %d lux", 
       states[T_INSIDE], states[T_OUTSIDE], states[HUMIDITY], states[LIGHT]);
       lcdPanel.doBlink(1, 13, 13);
       break;
@@ -612,7 +535,7 @@ uint8_t lcdShowMenu(uint8_t _menuItem) {
       break;
     case HUMIDITY_THRESHOLD:
       fprintf(&lcdout, "Humidity not"); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %d%", settings.humidThreshold);
+      fprintf(&lcdout, "less than %d", settings.humidThreshold);
       break;
     case T_OUTSIDE_THRESHOLD:
       fprintf(&lcdout, "Temperature not"); lcd.setCursor(0,1);
@@ -704,7 +627,7 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       return 0;
     case HUMIDITY_THRESHOLD:
       fprintf(&lcdout, "Changing humid."); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %d%", settings.humidThreshold);
+      fprintf(&lcdout, "less than %d", settings.humidThreshold);
       lcdPanel.doBlink(1, 10, 13);
       return 0;
     case T_OUTSIDE_THRESHOLD:
@@ -753,7 +676,7 @@ uint8_t lcdLeftButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
     printf_P(PSTR("LCD Panel: Info: Left click callback: Menu #%d, Cursor #%d.\n\r"),
       _menuItem, _editCursor);
 
-  settings_changed = true;
+  storage.isChanged = true;
   switch (_menuItem) {
     case WATERING_DAY:
       settings.wateringDayPeriod--;
@@ -822,7 +745,7 @@ uint8_t lcdLeftButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
       } else {
         RTC.year--;
       }
-      settings_changed = false;
+  	  storage.isChanged = false;
       break;
     default:
       _menuItem = HOME;
@@ -837,7 +760,7 @@ uint8_t lcdRightButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
     printf_P(PSTR("LCD Panel: Info: Right click callback: Menu #%d, Cursor #%d.\n\r"),
       _menuItem, _editCursor);
   
-  settings_changed = true;
+  storage.isChanged = true;
   switch (_menuItem) {
     case WATERING_DAY:
       settings.wateringDayPeriod++;
@@ -906,8 +829,7 @@ uint8_t lcdRightButtonClick(uint8_t _menuItem, uint8_t _editCursor) {
       } else {
         RTC.year++;
       }
-      // nothing save to eeprom
-      settings_changed = false;
+  	  storage.isChanged = false;
       break;
     default:
       _menuItem = HOME;
