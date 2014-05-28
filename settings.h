@@ -59,13 +59,13 @@ class Storage
 	  if(eeprom_offset > EEPROMSizeATmega328-sizeof(settings)) 
 	    eeprom_offset = 0;
 
-          printf_P(PSTR("EEPROM: Warning: Write data to EEPRROM!\n\r"));
+      printf_P(PSTR("EEPROM: Warning: Write data to EEPRROM!\n\r"));
 	  int writeCount = EEPROM.updateBlock(eeprom_offset, settings);
 	  
 	  if(writeCount = sizeof(settings)) {
 	    if(DEBUG) printf_P(PSTR("EEPROM: Info: Saved settings at address %d with size %d.\n\r"),
-	    eeprom_offset, writeCount);
-	      return true;
+	                eeprom_offset, writeCount);
+	    return true;
 	  }
 	  printf_P(PSTR("EEPROM: Error: Can't save settings! Stored %d of %d at address %d.\n\r"),
 	    writeCount, sizeof(settings), eeprom_offset);
