@@ -18,6 +18,10 @@
 Storage storage;
 bool storage_ok;
 
+// Declare RTC state map keys
+#define CDN  "cdn" // days after 2000-01-01
+#define DTIME  "dtime" // minutes after 00:00
+
 // Declare DHT11 sensor digital pin
 #define DHT11PIN  3
 // Declare DHT11 sensor state map keys
@@ -30,6 +34,9 @@ bool storage_ok;
 #define T_INSIDE  "t inside"
 #define T_SUBSTRATE  "t substrate"
 
+// Declare BH1750 sensor state map key
+#define LIGHT  "light"
+
 // Declare liquid sensors analog pins
 #define S1_SUBSTRATEPIN  A0
 #define S2_WATERINGPIN  A1
@@ -40,13 +47,6 @@ bool storage_ok;
 #define S2_WATERING  "s2 watering"
 //#define S3_WATTERING  "s3 wattering"
 #define S4_MISTING  "s4 misting"
-
-// Declare RTC state map keys
-#define CDN  "cdn" // days after 2000-01-01
-#define DTIME  "dtime" // minutes after 00:00
-
-// Declare BH1750 sensor state map key
-#define LIGHT  "light"
 
 // Declare Relays pins
 #define P1_MISTINGPIN  4
@@ -106,7 +106,7 @@ LCDPanel lcdPanel(A4, A5);
 
 // Declare delay managers, ms
 timer_t slow_timer(15000);
-timer_t fast_timer(10000);
+timer_t fast_timer(5000);
 
 uint32_t start_misting = 0;
 uint32_t last_misting = 0;
@@ -123,7 +123,7 @@ void setup()
   Serial.begin(57600);
   // Initialize PSTR
   printf_begin();
-
+  
   // Load settings
   storage_ok = storage.load();
 
@@ -133,6 +133,8 @@ void setup()
   lcdPanel.attachLongPress(lcdButtonLongPress);
   lcdPanel.attachEditMenu(lcdEditMenu);
   lcdPanel.attachShowMenu(lcdShowMenu);
+  // initialize LCD panel
+  lcdPanel.begin();
 
   // check connected devices
   system_check();
@@ -151,6 +153,7 @@ void loop()
     doWork();
 
     if( storage.isChanged && storage_ok ) {
+      // WARNING: EEPROM can burn!
       storage_ok = storage.save();
     }
   }
@@ -158,13 +161,13 @@ void loop()
   if( fast_timer ) {
     read_RTC();
     read_levels();
+    
+    if( states[WARNING] != NO_WARNING )
+      lcdWarning();
   }
 
-  if( states[WARNING] == NO_WARNING ) {
-    lcdPanel.update();    
-  } else {
-    lcdWarning();
-  } 
+  if( states[WARNING] == NO_WARNING )
+    lcdPanel.update();
 
   delay(100); // not so fast
 }
@@ -240,18 +243,16 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
     return false;
   }
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
   states[T_INSIDE] = value;
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), 
-        states[T_INSIDE]);
   
   value = dallas.getTempCByIndex(1);
   if(value == DEVICE_DISCONNECTED_C) {
     printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
     return false;
   }
+  if(DEBUG) printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
   states[T_SUBSTRATE] = value;
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), 
-  	states[T_SUBSTRATE]);
   return true;
 }
 
@@ -259,14 +260,15 @@ bool read_DS18B20() {
 
 bool read_BH1750() {
   BH1750 lightMeter;
-  lightMeter.begin();
-  states[LIGHT] = lightMeter.readLightLevel();
+  lightMeter.begin(BH1750_ONE_TIME_HIGH_RES_MODE_2);
+  int value = lightMeter.readLightLevel();
 
-  if(states[LIGHT] == 54612) {
+  if(value < 0) {
     printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
     return false;
   }
-  if(DEBUG) printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), states[LIGHT]);
+  if(DEBUG) printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), value);
+  states[LIGHT] = value;
   return true;
 }
 
@@ -275,30 +277,30 @@ bool read_BH1750() {
 void read_levels() {
   pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
   if(digitalRead(S1_SUBSTRATEPIN) == 0) {
-  	if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is full.\n\r"));
-  	states[S1_SUBSTRATE] = true;
+    if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is full.\n\r"));
+    states[S1_SUBSTRATE] = true;
   } else {
-  	if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is not full!\n\r"));
-  	states[S1_SUBSTRATE] = false;
+    if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is not full!\n\r"));
+    states[S1_SUBSTRATE] = false;
   }
-
+  
   pinMode(S2_WATERINGPIN, INPUT_PULLUP);
   if(digitalRead(S2_WATERINGPIN) == 0) {
-  	if(DEBUG) printf_P(PSTR("LEVELS: Info: Watering has done.\n\r"));
-  	states[S2_WATERING] = true;
+    if(DEBUG) printf_P(PSTR("LEVELS: Info: Watering has done.\n\r"));
+    states[S2_WATERING] = true;
   } else {
-  	if(DEBUG) printf_P(PSTR("LEVELS: Info: No watering.\n\r"));
-  	states[S2_WATERING] = false;
+    if(DEBUG) printf_P(PSTR("LEVELS: Info: No watering.\n\r"));
+    states[S2_WATERING] = false;
   }
-
+  
   // no pull-up for A6 and A7
   pinMode(S4_MISTINGPIN, INPUT);
   if(analogRead(S4_MISTINGPIN) < 150) {
     if(DEBUG) printf_P(PSTR("LEVELS: Info: Misting water sensor active.\n\r"));
-  	states[S4_MISTING] = true;
+    states[S4_MISTING] = true;
   } else {
-  	if(DEBUG) printf_P(PSTR("LEVELS: Info: No water for misting!\n\r"));
-  	states[S4_MISTING] = false;
+    if(DEBUG) printf_P(PSTR("LEVELS: Info: No water for misting!\n\r"));
+    states[S4_MISTING] = false;
   }
 }
 
@@ -307,7 +309,7 @@ void read_levels() {
 void relayOn(const char* relay) {
   bool status = relays(relay, 0); // 0 is ON
   if(status) {
-    if(DEBUG) printf("RELAY: Info: '%s' is enabled.\n\r", relay);
+    if(DEBUG) printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay);
     states[relay] = true;
   }
 }
@@ -315,7 +317,7 @@ void relayOn(const char* relay) {
 void relayOff(const char* relay) {
   bool status = relays(relay, 1); // 1 is OFF
   if(status) {
-    if(DEBUG) printf("RELAY: Info: '%s' is disabled.\n\r", relay);
+    if(DEBUG) printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay);
     states[relay] = false;
   }
 }
@@ -341,7 +343,7 @@ bool relays(const char* relay, uint8_t state) {
     digitalWrite(LAMPPIN, state);
     return true;
   }
-  printf("RELAY: Error: '%s' is unknown!\n\r", relay);
+  printf_P(PSTR("RELAY: Error: '%s' is unknown!\n\r"), relay);
   return false;
 }
 
@@ -354,7 +356,7 @@ void doMisting() {
   	relayOn(P1_MISTING);
   	start_misting = millis();
   	states[WARNING] = WARNING_MISTING;
-  	if(DEBUG) printf("MISTING: Info: Start.\n\r");
+  	if(DEBUG) printf_P(PSTR("MISTING: Info: Start.\n\r"));
   	return;
   } 
 
@@ -362,7 +364,7 @@ void doMisting() {
   	relayOff(P1_MISTING);
   	start_misting = -1;
   	states[WARNING] = NO_WARNING;
-  	if(DEBUG) printf("MISTING: Info: Stop.\n\r");
+  	if(DEBUG) printf_P(PSTR("MISTING: Info: Stop.\n\r"));
   	return;
   }
 }
@@ -376,7 +378,7 @@ void doWatering() {
   	relayOn(P2_WATERING);
   	start_watering = millis();
   	states[WARNING] = WARNING_WATERING;
-  	if(DEBUG) printf("WATERING: Info: Start.\n\r");
+  	if(DEBUG) printf_P(PSTR("WATERING: Info: Start.\n\r"));
   	return;
   }
 
@@ -384,7 +386,7 @@ void doWatering() {
   	relayOff(P2_WATERING);
   	start_watering = 0;
   	states[WARNING] = WARNING_NO_SUBSTRATE;
-  	printf("MISTING: Error: No substrate!\n\r");
+  	printf_P(PSTR("MISTING: Error: No substrate!\n\r"));
   	return;
   } 
   else {
@@ -551,7 +553,7 @@ uint8_t lcdShowMenu(uint8_t _menuItem) {
         RTC.day, RTC.month, RTC.year);
       break;   
     default:
-      lcdPanel.showMenu(HOME);
+      return HOME;
       break;
   }
   return _menuItem;
@@ -855,9 +857,7 @@ uint8_t lcdButtonLongPress(uint8_t _menuItem) {
 void lcdWarning() {
   if(DEBUG) printf_P(PSTR("LCD Panel: Info: Show Warning.\n\r"));
 
-  // not fast update lcd
-  delay(200);
-
+  lcd.setCursor(0,0);  
   switch (states[WARNING]) {
     case WARNING_NO_WATER:
       fprintf(&lcdout, "No water! :("); lcd.setCursor(0,1);
@@ -900,8 +900,8 @@ void lcdWarning() {
       lcdPanel.doBlink(1, 10, 11);
       return;
     case WARNING_EEPROM:
-      fprintf(&lcdout, "EEPROM ERROR!"); lcd.setCursor(0,1);
-      fprintf(&lcdout, "Settings reset!");
+      fprintf(&lcdout, "EEPROM ERROR!   "); lcd.setCursor(0,1);
+      fprintf(&lcdout, "Settings reset! ");
       lcdPanel.doBlink(1, 0, 15);
       return;
     case WARNING_DHT11:

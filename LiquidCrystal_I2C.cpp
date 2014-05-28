@@ -52,7 +52,7 @@
  @abstract   LCD_BACKLIGHT
  @discussion BACKLIGHT MASK used when backlight is on
  */
-#define LCD_BACKLIGHT   0x08//0xFF
+#define LCD_BACKLIGHT   0xFF
 
 
 // Default library configuration parameters used by class constructor with
@@ -63,21 +63,21 @@
  @abstract   Enable bit of the LCD
  @discussion Defines the IO of the expander connected to the LCD Enable
  */
-#define EN B00000100//6  // Enable bit
+#define EN 6  // Enable bit
 
 /*!
  @defined 
  @abstract   Read/Write bit of the LCD
  @discussion Defines the IO of the expander connected to the LCD Rw pin
  */
-#define RW B00000010//5  // Read/Write bit
+#define RW 5  // Read/Write bit
 
 /*!
  @defined 
  @abstract   Register bit of the LCD
  @discussion Defines the IO of the expander connected to the LCD Register select pin
  */
-#define RS B00000001//4  // Register select bit
+#define RS 4  // Register select bit
 
 /*!
  @defined 
@@ -243,7 +243,7 @@ void LiquidCrystal_I2C::send(uint8_t value, uint8_t mode)
    // longer that what is needed both for toggling and enable pin an to execute
    // the command.
    
-   /*if ( mode == FOUR_BITS )
+   if ( mode == FOUR_BITS )
    {
       write4bits( (value & 0x0F), COMMAND );
    }
@@ -251,11 +251,7 @@ void LiquidCrystal_I2C::send(uint8_t value, uint8_t mode)
    {
       write4bits( (value >> 4), mode );
       write4bits( (value & 0x0F), mode);
-   }*/
-   uint8_t highnib = value & 0xf0;
-   uint8_t lownib = (value << 4) & 0xf0;
-   write4bits( (highnib), mode );
-   write4bits( (lownib), mode );
+   }
 }
 
 //
