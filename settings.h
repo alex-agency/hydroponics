@@ -59,7 +59,7 @@ class Storage
 	  if(eeprom_offset > EEPROMSizeATmega328-sizeof(settings)) 
 	    eeprom_offset = 0;
 
-      printf_P(PSTR("EEPROM: Warning: Write data to EEPRROM!\n\r"));
+         printf_P(PSTR("EEPROM: Warning: Write data to EEPRROM!\n\r"));
 	  int writeCount = EEPROM.updateBlock(eeprom_offset, settings);
 	  
 	  if(writeCount = sizeof(settings)) {

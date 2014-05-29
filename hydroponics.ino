@@ -83,8 +83,8 @@ struct comparator {
 SimpleMap<const char*, uint8_t, 14, comparator> states;
 
 // Declare push buttons
-OneButton leftButton(A4, true);
-OneButton rightButton(A5, true);
+OneButton rightButton(A2, true);
+OneButton leftButton(A3, true);
 
 // Declare LCD1609
 // Set the pins on the I2C chip used for LCD connections: 
@@ -120,7 +120,7 @@ bool blink;
 
 // Declare delay managers, ms
 timer_t slow_timer(15000);
-timer_t fast_timer(5000);
+timer_t fast_timer(1000);
 
 uint32_t start_misting = 0;
 uint32_t last_misting = 0;
@@ -139,7 +139,7 @@ void setup()
   printf_begin();
   
   // Load settings
-  storage_ok = storage.load();
+  //storage_ok = storage.load();
 
   // Configure LCD1609
   // Initialize the lcd for 16 chars 2 lines and turn on backlight
@@ -148,13 +148,15 @@ void setup()
   fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
 
   // Configure buttons
-  leftButton.attachClick( leftButtonClick );
-  leftButton.attachLongPressStart( buttonsLongPress );
   rightButton.attachClick( rightButtonClick );
+  rightButton.attachDoubleClick( rightButtonClick );
   rightButton.attachLongPressStart( buttonsLongPress );
-
+  leftButton.attachClick( leftButtonClick );
+  leftButton.attachDoubleClick( leftButtonClick );
+  leftButton.attachLongPressStart( buttonsLongPress );
+  
   // check connected devices
-  system_check();
+  //system_check();
 }
 
 //
@@ -163,25 +165,25 @@ void setup()
 void loop()
 {
   if( slow_timer ) {
-    read_DHT11();
-    read_DS18B20();
-    read_BH1750();
+    //read_DHT11();
+    //read_DS18B20();
+    //read_BH1750();
 
-    doWork();
+    //doWork();
 
     if( storage.isChanged && storage_ok ) {
       // WARNING: EEPROM can burn!
-      storage_ok = storage.save();
+      //storage_ok = storage.save();
     }
   }
 
   if( fast_timer ) {
     read_RTC();
-    read_levels();
+    //read_levels();
 
     if( states[WARNING] != NO_WARNING )
       lcdWarning();
-  	else if( menuEditMode ) {
+    else if( menuEditMode ) {
       lcdEditMenu(menuItem, editCursor);
     } else {
       lcdShowMenu(menuItem);
@@ -191,7 +193,7 @@ void loop()
   leftButton.tick();
   rightButton.tick();
 
-  delay(100); // not so fast
+  delay(50); // not so fast
 }
 
 /****************************************************************************/
@@ -426,7 +428,7 @@ void system_check() {
   read_RTC();
   if(RTC.year < 2014 || RTC.year > 2018) {
     printf_P(PSTR("RTC: Wrong date!\n\r"));
-    lcdEditMenu(CLOCK, 0);
+    //lcdEditMenu(CLOCK, 4);
     return;
   }
   
@@ -499,7 +501,7 @@ void doWork() {
 /****************************************************************************/
 
 uint8_t lcdShowMenu(uint8_t _menuItem) {
-  if(DEBUG) printf_P(PSTR("LCD Panel: Info: Show menu #%d.\n\r"), _menuItem);
+   printf_P(PSTR("LCD Panel: Info: Show menu #%d.\n\r"), _menuItem);
   menuItem = _menuItem;
 
   lcd.setCursor(0,0);
@@ -580,7 +582,7 @@ uint8_t lcdShowMenu(uint8_t _menuItem) {
 /****************************************************************************/
 
 uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
-  if(DEBUG) printf_P(PSTR("LCD Panel: Info: Edit menu #%d with cursor #%d.\n\r"), 
+   printf_P(PSTR("LCD Panel: Info: Edit menu #%d with cursor #%d.\n\r"), 
       _menuItem, _editCursor);
   menuEditMode = true;
   menuItem = _menuItem;
@@ -660,20 +662,20 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       return 0;
     case T_SUBSTRATE_THRESHOLD:
       fprintf(&lcdout, "Changing temp.  "); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %dC    ", settings.tempSubsThreshold);
+      fprintf(&lcdout, "less than %02dC   ", settings.tempSubsThreshold);
       lcdBlink(1, 10, 13);
       return 0;   
     case CLOCK:
     case HOME:
       fprintf(&lcdout, "Setting time    "); lcd.setCursor(0,1);
-      fprintf(&lcdout, "%d:%d %d-%d-%d       ", RTC.hour, RTC.minute, 
+      fprintf(&lcdout, "%02d:%02d %02d-%02d-%04d", RTC.hour, RTC.minute, 
         RTC.day, RTC.month, RTC.year);
       if(_editCursor == 4) {
-        lcdBlink(1, 12, 13);
+        lcdBlink(1, 0, 1);
         return 0;
       } else 
       if(_editCursor == 3) {
-        lcdBlink(1, 9, 10);
+        lcdBlink(1, 3, 4);
         return 1;
       } else 
       if(_editCursor == 2) {
@@ -681,13 +683,12 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
         return 2;
       } else 
       if(_editCursor == 1) {
-        lcdBlink(1, 3, 4);
+        lcdBlink(1, 9, 10);
         return 3;
       }
-      lcdBlink(1, 0, 1);
+      lcdBlink(1, 12, 15);
       return 4;
     default:
-      lcdShowMenu(HOME);
       return 0;
   }
 };
@@ -695,11 +696,11 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
 /****************************************************************************/
 
 void leftButtonClick() {
-  if(DEBUG) 
+   
     printf_P(PSTR("LCD Panel: Info: Left click: Menu #%d, Cursor #%d.\n\r"),
       menuItem, editCursor);
   
-  if(menuEditMode == false) {
+  /*if(menuEditMode == false) {
     // move backward, previous menu
     lcdShowMenu(--menuItem);
   }
@@ -779,17 +780,17 @@ void leftButtonClick() {
       menuItem = HOME;
   }
 
-  lcdEditMenu(menuItem, editCursor);
+  lcdEditMenu(menuItem, editCursor);*/
 };
 
 /****************************************************************************/
 
 void rightButtonClick() {
-  if(DEBUG) 
+   
     printf_P(PSTR("LCD Panel: Info: Right click: Menu #%d, Cursor #%d.\n\r"),
       menuItem, editCursor);
   
-  if(menuEditMode == false) {
+  /*if(menuEditMode == false) {
     // move forward, next menu
     lcdShowMenu(++menuItem);
   }
@@ -869,18 +870,18 @@ void rightButtonClick() {
       menuItem = HOME;
   }
 
-  lcdEditMenu(menuItem, editCursor);
+  lcdEditMenu(menuItem, editCursor);*/
 }
 
 /****************************************************************************/
 
 void buttonsLongPress() {
-  if(DEBUG) printf_P(PSTR("LCD Panel: Info: LongPress callback: Menu #%d.\n\r"),
+   printf_P(PSTR("LCD Panel: Info: LongPress callback: Menu #%d.\n\r"),
     menuItem);
 
-  if(menuEditMode == false) {
+  /*if(menuEditMode == false) {
     menuEditMode = true;
-    lcdEditMenu(menuItem, editCursor);
+    editCursor = lcdEditMenu(menuItem, editCursor);
     return;
   }
   
@@ -898,7 +899,7 @@ void buttonsLongPress() {
     RTC.startClock();
   }
 
-  lcdShowMenu(menuItem);
+  lcdShowMenu(menuItem);*/
 }
 
 /****************************************************************************/
