@@ -17,7 +17,6 @@
 #define DEBUG_LCD  true
 
 // Declare settings
-Storage storage;
 bool storage_ok;
 
 // Declare RTC state map keys
@@ -173,10 +172,10 @@ void loop()
 
     //doWork();
 
-    if( storage.isChanged && storage_ok ) {
+    if( storage.changed && storage_ok ) {
       // WARNING: EEPROM can burn!
       storage_ok = storage.save();
-      storage.isChanged = false;
+      storage.changed = false;
     }
   }
 
@@ -808,7 +807,7 @@ void leftButtonClick() {
     return;
   }  
   // mark settings for save
-  storage.isChanged = true;
+  storage.changed = true;
   // do minus one for particular value
   switch (menuItem) {
     case WATERING_DAY:
@@ -857,7 +856,7 @@ void leftButtonClick() {
       settings.tempSubsThreshold--;
       break;
     case CLOCK:
-      storage.isChanged = false;
+      storage.changed = false;
       RTC.stopClock();
       if(editCursor == 4) {
         if(RTC.hour > 0)
@@ -900,7 +899,7 @@ void rightButtonClick() {
     return;
   }
   // mark settings for save
-  storage.isChanged = true;
+  storage.changed = true;
   // do plus one for particular value
   switch (menuItem) {
     case WATERING_DAY:
@@ -949,7 +948,7 @@ void rightButtonClick() {
       settings.tempSubsThreshold++;
       break;
     case CLOCK:
-      storage.isChanged = false;
+      storage.changed = false;
       RTC.stopClock();
       if(editCursor == 4) {
         if(RTC.hour < 23)
