@@ -4,7 +4,10 @@
 
 #include <avr/eeprom.h>
 
-#define EEPROM_SIZE  1024 
+// Debug info
+#define DEBUG  false
+
+#define EEPROM_SIZE  256 
 #define EEPROM_OFFSET  false
 
 // Declare EEPROM values
@@ -28,9 +31,6 @@ struct SettingsStruct {
   SETTINGS_ID
 }, memory;
 
-// Debug info
-#define DEBUG  true
-
 
 class EEPROM 
 {
@@ -38,20 +38,24 @@ class EEPROM
     bool changed;
 
     bool load() {
+      address_offset = 0;
       // search through the EEPROM for a valid structure
-      for(; address_offset < EEPROM_SIZE-sizeof(memory); ++address_offset) {    
+      while(address_offset < (EEPROM_SIZE-sizeof(settings))) {   
         //read a struct sized block from the EEPROM
         readBlock(address_offset, memory);
         if (strcmp(memory.id, SETTINGS_ID) == 0) {
-	        // load settings        
-	        settings = memory;
+	  // load settings
+	  settings = memory;
           if(DEBUG)
-            printf_P(PSTR("EEPROM: Info: Settings loaded from %d address.\n\r"),
+            printf_P(PSTR("EEPROM: Info: Settings loaded from address: %d.\n\r"),
               address_offset);
           return true;
-	      }
+	}
+        address_offset++;
       } 
       printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
+      // initial save default settings to EEPROM
+      //address_offset = 0; changed = true; save();
       return false;
     }
 
@@ -59,7 +63,7 @@ class EEPROM
       // move on store position
       if(EEPROM_OFFSET) address_offset++;
       // if writing at offset would mean going outside the EEPROM limit
-      if(address_offset > EEPROM_SIZE-sizeof(settings)) 
+      if(address_offset > (EEPROM_SIZE-sizeof(settings))) 
         address_offset = 0;
       
       uint8_t updateCount = 0;
@@ -72,30 +76,31 @@ class EEPROM
       }
 
       if(updateCount == sizeof(settings)) {
-	      if(DEBUG) 
-          printf_P(PSTR("EEPROM: Info: Saved settings to %d address.\n\r"),
+	if(DEBUG) 
+          printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
            address_offset);
-	      return true;
+	return true;
       }
-      printf_P(PSTR("EEPROM: Error: Settings isn't saved to %d address!\n\r"), 
+      printf_P(PSTR("EEPROM: Error: Settings isn't saved at %d address!\n\r"), 
         address_offset);
       return false;
     }
 
   private:
-    uint8_t address_offset;
+    uint16_t address_offset;
 
-    template <class T> void readBlock(uint8_t _address, const T _value) {
+    template <class T> void readBlock(uint16_t _address, const T& _value) {
        eeprom_read_block((void*)&_value, (const void*)_address, sizeof(_value));
     }
 
-    template <class T> uint8_t updateBlock(uint8_t _address, const T _value) {
-      uint8_t writeCount, skipCount = 0;
-      const byte* bytePointer = (const byte*)(void*)&_value;
+    template <class T> uint8_t updateBlock(uint16_t _address, T& _value) {
+      uint8_t writeCount = 0, skipCount = 0;
+      const uint8_t* bytePointer = (const uint8_t*)(void*)&_value;
       for(uint8_t i = 0; i < sizeof(_value); i++) {
         if (eeprom_read_byte((uint8_t*)_address) != *bytePointer) {
+          if(DEBUG) printf_P(PSTR("writing: %d\n\r"), *bytePointer);
           //do the actual EEPROM writing
-          eeprom_write_byte((uint8_t*)_address, (uint8_t*)&_value);
+          eeprom_write_byte((uint8_t*)_address, *bytePointer);
           writeCount++; 
         } else {
           skipCount++;
@@ -103,11 +108,12 @@ class EEPROM
         _address++;
         bytePointer++;
       }
-      printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), writeCount);
+      printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), 
+        writeCount);
+      if(DEBUG) printf_P(PSTR("EEPROM: Info: %d bytes not changed!\n\r"), 
+        skipCount);
       return writeCount + skipCount;
     }
 };
-
-extern EEPROM storage;
 
 #endif // __SETTINGS_H__
