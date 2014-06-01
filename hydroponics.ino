@@ -12,7 +12,7 @@
 #include "LiquidCrystal_I2C.h"
 
 // Debug info
-#define DEBUG  false
+#define DEBUG  true
 #define DEBUG_LCD  false
 
 // Declare settings
@@ -200,7 +200,7 @@ void loop()
     read_DS18B20();
     read_BH1750();
 
-    //doWork();
+    doWork();
 
     if( storage.changed && storage_ok ) {
       // WARNING: EEPROM can burn!
@@ -495,11 +495,11 @@ void system_check() {
 
 /****************************************************************************/
 
-/*void doWork() {
+void doWork() {
   uint32_t now = millis();
 
   // day time
-  if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
+  /*if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
 
     if(now > last_watering + (settings.wateringDayPeriod * ONE_MINUTE)) {
       //doWatering();
@@ -530,7 +530,7 @@ void system_check() {
     if(now > last_misting + (settings.mistingSunrisePeriod * ONE_MINUTE)) {
       //doMisting();
     }
-  }
+  }*/
 
   if(states[LIGHT] <= settings.lightThreshold) {
     relayOn(LAMP);
