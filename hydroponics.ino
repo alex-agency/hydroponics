@@ -13,7 +13,7 @@
 
 // Debug info
 #define DEBUG  false
-#define DEBUG_LCD  true
+#define DEBUG_LCD  false
 
 // Declare settings
 EEPROM storage;
@@ -87,9 +87,7 @@ OneButton rightButton(A2, true);
 OneButton leftButton(A3, true);
 
 // Declare LCD1609
-// Set the pins on the I2C chip used for LCD connections: 
-//                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
-LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 // Declare fprintf
 int lcd_putc(char c, FILE *) {
   lcd.write(c);
@@ -120,11 +118,19 @@ uint32_t lastTouched = 0;
 #define T_OUTSIDE_THRESHOLD  12
 #define T_SUBSTRATE_THRESHOLD  13
 #define CLOCK  14
-// Declare custom lcd char
-byte celcium[8] = {
-  B11000, B11000, B00000, B00111, 
-  B01000, B01000, B00111, B00000 };
-uint8_t celciumId = 0;
+// Declare custom characters
+byte celcium_char[8] = {24, 24, 3, 4, 4, 4, 3, 0};
+const uint8_t celcium_c = 0;
+byte heart_char[8] = {0, 10, 21, 17, 10, 4, 0, 0};
+const uint8_t heart_c = 1;
+byte humidity_char[8] = {4, 10, 10, 17, 17, 17, 14, 0};
+const uint8_t humidity_c = 2;
+byte temp_char[8] = {4, 10, 10, 14, 31, 31, 14, 0};
+const uint8_t temp_c = 3;
+byte flower_char[8] = {14, 27, 21, 14, 4, 12, 4, 0};
+const uint8_t flower_c = 4;
+byte lamp_char[8] = {14, 17, 17, 17, 14, 14, 4, 0};
+const uint8_t lamp_c = 5;
 
 // Declare PSTR
 int serial_putc(char c, FILE *) {
@@ -137,6 +143,7 @@ timer_t slow_timer(30000);
 timer_t fast_timer(1000);
 
 const uint16_t ONE_MINUTE = 60000;
+const uint32_t FIVE_MINUTES = 300000;
 
 //uint32_t start_misting = 0;
 //uint32_t last_misting = 0;
@@ -158,12 +165,18 @@ void setup()
   storage_ok = storage.load();
 
   // Configure LCD1609
-  // create a new custom character
-  lcd.createChar(celciumId, celcium);
-  // Initialize the lcd for 16 chars 2 lines and turn on backlight
-  lcd.begin(16, 2);
+  // Initialize the lcd
+  lcd.begin();
+  // create custom characters
+  lcd.createChar(celcium_c, celcium_char);
+  lcd.createChar(heart_c, heart_char);
+  lcd.createChar(humidity_c, humidity_char);
+  lcd.createChar(temp_c, temp_char);
+  lcd.createChar(flower_c, flower_char);
+  lcd.createChar(lamp_c, lamp_char);
   // Initialize fprintf
   fdev_setup_stream (&lcdout, lcd_putc, NULL, _FDEV_SETUP_WRITE);
+  lcd.clear();
 
   // Configure buttons
   rightButton.attachClick( rightButtonClick );
@@ -194,6 +207,12 @@ void loop()
       storage_ok = storage.save();
       storage.changed = false;
     }
+    // sleeping mode
+    if(backlight && 
+        lastTouched+FIVE_MINUTES < (uint32_t)millis()) 
+    {
+      lcdBacklightToggle();
+    }
   }
 
   if( fast_timer ) {
@@ -205,7 +224,7 @@ void loop()
     if( states[WARNING] != NO_WARNING )
       lcdWarning();
     else if( menuItem != HOME 
-        && lastTouched+ONE_MINUTE < (uint32_t)millis() )
+        && lastTouched+ONE_MINUTE < millis() )
       lcdShowMenu(HOME);
     else if( menuEditMode )
       lcdEditMenu(menuItem, editCursor);
@@ -584,11 +603,13 @@ void lcdShowMenu(uint8_t _menuItem) {
       break;
     case T_OUTSIDE_THRESHOLD:
       fprintf(&lcdout, "Temp. air not   "); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %2dC   ", settings.tempThreshold);
+      fprintf(&lcdout, "less than %2d%c   ", 
+        settings.tempThreshold, celcium_c);
       break;
     case T_SUBSTRATE_THRESHOLD:
       fprintf(&lcdout, "Substrate temp. "); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %2dC   ", settings.tempSubsThreshold);
+      fprintf(&lcdout, "less than %2d%c   ", 
+        settings.tempSubsThreshold, celcium_c);
       break;
     case CLOCK:
       fprintf(&lcdout, "Time:   %02d:%02d:%02d", 
@@ -607,22 +628,26 @@ void showHomeScreen(uint8_t _homeItem) {
   // save state
   homeItem = _homeItem;
 
-  fprintf(&lcdout, "Hydroponic %02d:%02d", RTC.hour, RTC.minute);
+  fprintf(&lcdout, "%c%c%c%c%c%c%c    %02d:%02d", flower_c, flower_c, 
+    flower_c, flower_c, heart_c, flower_c, heart_c, RTC.hour, RTC.minute);
   lcdTextBlink(0, 13, 13);
   lcd.setCursor(0,1);
   
   switch (homeItem) {
     case 0:
-      fprintf(&lcdout, "Air: %2dC %2d%%    ", states[T_OUTSIDE], states[HUMIDITY]);
+      fprintf(&lcdout, "Air: %c %2d%c %c %2d%%", temp_c, states[T_OUTSIDE],
+        celcium_c, humidity_c, states[HUMIDITY]);
       break;
     case 3:
-      fprintf(&lcdout, "Substrate: %2dC  ", states[T_SUBSTRATE]);
+      fprintf(&lcdout, "Substrate: %c %2d%c", temp_c,
+        states[T_SUBSTRATE], celcium_c);
       break;
     case 6:
-      fprintf(&lcdout, "Light: %3d lux  ", states[LIGHT]);
+      fprintf(&lcdout, "Light: %c %3d lux", lamp_c, states[LIGHT]);
       break;
     case 9:
-      fprintf(&lcdout, "Computer: %2dC   ", states[T_INSIDE]);
+      fprintf(&lcdout, "Computer:  %c %2d%c", temp_c, 
+        states[T_INSIDE], celcium_c);
       break;
   }
 
@@ -680,12 +705,14 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       return 0;
     case T_OUTSIDE_THRESHOLD:
       fprintf(&lcdout, "Changing temp.  "); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %2dC   ", settings.tempThreshold);
+      fprintf(&lcdout, "less than %2d%c   ", 
+        settings.tempThreshold, celcium_c);
       lcdTextBlink(1, 10, 11);
       return 0;
     case T_SUBSTRATE_THRESHOLD:
       fprintf(&lcdout, "Changing temp.  "); lcd.setCursor(0,1);
-      fprintf(&lcdout, "less than %2dC   ", settings.tempSubsThreshold);
+      fprintf(&lcdout, "less than %2d%c   ", 
+        settings.tempSubsThreshold, celcium_c);
       lcdTextBlink(1, 10, 11);
       return 0; 
     case CLOCK:
@@ -830,7 +857,7 @@ void lcdBacklightToggle() {
 void lcdTextBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
   if(blink) {
     if(DEBUG_LCD) 
-      printf_P(PSTR("LCD: Info: Blink: row #%d from %d to %d.\n\r"),
+      printf_P(PSTR("LCD Panel: Info: Blink: row #%d from %d to %d.\n\r"),
         _row, _start, _end); 
     
     while(_start <= _end) {
