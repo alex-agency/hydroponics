@@ -14,6 +14,7 @@
 // Debug info
 #define DEBUG  true
 #define DEBUG_LCD  false
+#define DEBUG_WORK  true
 
 // Declare settings
 EEPROM storage;
@@ -142,13 +143,17 @@ int serial_putc(char c, FILE *) {
 timer_t slow_timer(30000);
 timer_t fast_timer(1000);
 
+// Declare constants
 const uint16_t ONE_MINUTE = 60000;
 const uint32_t FIVE_MINUTES = 300000;
 
-//uint32_t start_misting = 0;
-//uint32_t last_misting = 0;
-//uint32_t start_watering = 0;
-//uint32_t last_watering = 0;
+// Declare variables
+uint32_t start_misting = 0;
+uint32_t last_misting = 0;
+uint32_t start_watering = 0;
+uint32_t last_watering = 0;
+uint32_t last_light = 0;
+uint8_t sunrise;
 
 
 //
@@ -373,6 +378,10 @@ void read_levels() {
 /****************************************************************************/
 
 void relayOn(const char* relay) {
+  if(states[relay]) {
+    // relay is already on
+    return;
+  }
   bool status = relays(relay, 0); // 0 is ON
   if(status) {
     if(DEBUG) printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay);
@@ -381,6 +390,10 @@ void relayOn(const char* relay) {
 }
 
 void relayOff(const char* relay) {
+  if(states[relay] == false) {
+    // relay is already off
+    return;
+  }
   bool status = relays(relay, 1); // 1 is OFF
   if(status) {
     if(DEBUG) printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay);
@@ -460,6 +473,51 @@ bool relays(const char* relay, uint8_t state) {
 
 /****************************************************************************/
 
+void doLight() {
+  if(DEBUG_WORK) printf_P(PSTR("Light: Info: checking.\n\r"));
+
+  // light enough 
+  if(states[LIGHT] > settings.lightThreshold) {
+    // turn off lamp
+    relayOff(LAMP);
+    // capture time
+    if(last_light == 0) {
+      last_light = millis();
+      return;
+    }
+    // watch 30 minutes
+    if(millis() > last_light + (FIVE_MINUTES * 6) && 
+        RTC.hour > 2 && RTC.hour <= 8) 
+    {
+      sunrise = states[DTIME]-30*60;
+      if(DEBUG_WORK) 
+        printf_P(PSTR("Light: Info: New sunrise hour is: %d\n\r"), sunrise/60*60);
+      return;
+    }
+    // default sunrise dtime
+    sunrise = 5*60*60;
+    if(DEBUG_WORK) printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
+    return;
+  }
+  
+  uint16_t light_off_threshold = sunrise + (settings.lightDayDuration*60*60);
+  if(states[DTIME] <= light_off_threshold) {
+    if(DEBUG_WORK) 
+      printf_P(PSTR("Light: Info: Lamp on till %d hour.\n\r"), 
+        light_off_threshold/60*60);
+    // turn on lamp
+    relayOn(LAMP);
+    return;
+  }
+
+  if(DEBUG_WORK) printf_P(PSTR("Light: Info: Lamp off, light day ended.\n\r"));
+  last_light = 0;
+  // turn off lamp
+  relayOff(LAMP);
+}
+
+/****************************************************************************/
+
 void system_check() {
   if(storage_ok == false) {
     printf_P(PSTR("EEPROM: Error!\n\r"));
@@ -488,7 +546,7 @@ void system_check() {
   
   if(read_BH1750() == false) {
     printf_P(PSTR("BH1750: Error!\n\r"));
-    //states[WARNING] = WARNING_BH1750;
+    states[WARNING] = WARNING_BH1750;
     return;
   }
 }
@@ -499,7 +557,7 @@ void doWork() {
   uint32_t now = millis();
 
   // day time
-  /*if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
+  if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
 
     if(now > last_watering + (settings.wateringDayPeriod * ONE_MINUTE)) {
       //doWatering();
@@ -519,8 +577,10 @@ void doWork() {
     if(now > last_misting + (settings.mistingNightPeriod * ONE_MINUTE)) {
       //doMisting();
     }
+
+    doLight();
   } 
-  // sunrise time
+  // sunrise or sunset time
   else {
 
     if(now > last_watering + (settings.wateringSunrisePeriod * ONE_MINUTE)) {
@@ -530,14 +590,9 @@ void doWork() {
     if(now > last_misting + (settings.mistingSunrisePeriod * ONE_MINUTE)) {
       //doMisting();
     }
-  }*/
 
-  if(states[LIGHT] <= settings.lightThreshold) {
-    relayOn(LAMP);
-  } else {
-    relayOff(LAMP);
+    doLight();
   }
-
 }
 
 /****************************************************************************/
