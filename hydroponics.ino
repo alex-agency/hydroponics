@@ -81,7 +81,7 @@ struct comparator {
     return strcmp(str1, str2) == 0;
   }
 };
-SimpleMap<const char*, uint8_t, 14, comparator> states;
+SimpleMap<const char*, int, 1, comparator> states;
 
 // Declare push buttons
 OneButton rightButton(A2, true);
@@ -190,9 +190,6 @@ void setup()
   leftButton.attachClick( leftButtonClick );
   leftButton.attachDoubleClick( leftButtonClick );
   leftButton.attachLongPressStart( buttonsLongPress );
-  
-  // check connected devices
-  system_check();
 }
 
 //
@@ -201,20 +198,19 @@ void setup()
 void loop()
 {
   if( slow_timer ) {
-    read_DHT11();
-    read_DS18B20();
-    read_BH1750();
-
+    // read modules and check errors
+    system_check();
+    // main program
     doWork();
-
+    // save settings
     if( storage.changed && storage_ok ) {
       // WARNING: EEPROM can burn!
       storage_ok = storage.save();
       storage.changed = false;
     }
-    // sleeping mode
+    // LCD sleeping
     if(backlight && 
-        lastTouched+FIVE_MINUTES < (uint32_t)millis()) 
+      lastTouched+FIVE_MINUTES < (uint32_t)millis()) 
     {
       lcdBacklightToggle();
     }
@@ -222,10 +218,12 @@ void loop()
 
   if( fast_timer ) {
     if(menuEditMode == false) {
+      // update clock
       read_RTC();
     }
+    // check level sensors
     read_levels();
-
+    // manage LCD
     if( states[WARNING] != NO_WARNING )
       lcdWarning();
     else if( menuItem != HOME 
@@ -236,11 +234,11 @@ void loop()
     else
       lcdShowMenu(menuItem);
   }
-
+  // update push buttons
   leftButton.tick();
   rightButton.tick();
-
-  delay(50); // not so fast
+  // not so fast update
+  delay(50);
 }
 
 /****************************************************************************/
@@ -252,8 +250,9 @@ void read_RTC() {
   states[CDN] = RTC.cdn;
   states[DTIME] = RTC.hour*60+RTC.minute;
 
-  if(DEBUG) printf_P(PSTR("RTC: Info: CDN: %d -> %d-%d-%d, DTIME: %d -> %d:%d:%d.\n\r"), 
-              states[CDN], RTC.year, RTC.month, RTC.day, 
+  if(DEBUG) 
+    printf_P(PSTR("RTC: Info: CDN: %d %02d-%02d-%4d, DTIME: %d %02d:%02d:%02d.\n\r"), 
+              states[CDN], RTC.day, RTC.month, RTC.year, 
               states[DTIME], RTC.hour, RTC.minute, RTC.second);
 }
 
@@ -403,7 +402,7 @@ void relayOff(const char* relay) {
 
 bool relays(const char* relay, uint8_t state) {
   if(strcmp(relay, P1_MISTING) == 0) {
-  	pinMode(P1_MISTINGPIN, OUTPUT);
+    pinMode(P1_MISTINGPIN, OUTPUT);
     digitalWrite(P1_MISTINGPIN, state);
     return true;
   } 
@@ -413,7 +412,7 @@ bool relays(const char* relay, uint8_t state) {
     return true;
   } 
   if(strcmp(relay, LAMP) == 0) {
-  	pinMode(LAMPPIN, OUTPUT);
+    pinMode(LAMPPIN, OUTPUT);
     digitalWrite(LAMPPIN, state);
     return true;
   }
@@ -474,7 +473,8 @@ bool relays(const char* relay, uint8_t state) {
 /****************************************************************************/
 
 void doLight() {
-  if(DEBUG_WORK) printf_P(PSTR("Light: Info: checking.\n\r"));
+  if(DEBUG_WORK) printf_P(PSTR("Light: Info: Light intensity: %d lux.\n\r"),
+      states[LIGHT]);
 
   // light enough 
   if(states[LIGHT] > settings.lightThreshold) {
@@ -489,28 +489,27 @@ void doLight() {
     if(millis() > last_light + (FIVE_MINUTES * 6) && 
         RTC.hour > 2 && RTC.hour <= 8) 
     {
-      sunrise = states[DTIME]-30*60;
+      sunrise = states[DTIME]-30;
       if(DEBUG_WORK) 
-        printf_P(PSTR("Light: Info: New sunrise hour is: %d\n\r"), sunrise/60*60);
+        printf_P(PSTR("Light: Info: New sunrise hour is: %d\n\r"), sunrise/60);
       return;
     }
     // default sunrise dtime
-    sunrise = 5*60*60;
+    sunrise = 5*60;
     if(DEBUG_WORK) printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
     return;
   }
   
-  uint16_t light_off_threshold = sunrise + (settings.lightDayDuration*60*60);
-  if(states[DTIME] <= light_off_threshold) {
+  uint16_t light_off_threshold = sunrise + (settings.lightDayDuration*60);
+  if(sunrise > 0 && states[DTIME] <= light_off_threshold) {
     if(DEBUG_WORK) 
       printf_P(PSTR("Light: Info: Lamp on till %d hour.\n\r"), 
-        light_off_threshold/60*60);
+        light_off_threshold/60);
     // turn on lamp
     relayOn(LAMP);
     return;
   }
-
-  if(DEBUG_WORK) printf_P(PSTR("Light: Info: Lamp off, light day ended.\n\r"));
+  
   last_light = 0;
   // turn off lamp
   relayOff(LAMP);
@@ -535,13 +534,13 @@ void system_check() {
   if(read_DHT11() == false) {
     printf_P(PSTR("DHT11: Error!\n\r"));
     //states[WARNING] = WARNING_DHT11;
-    return;
+    //return;
   }
   
   if(read_DS18B20() == false) {
     printf_P(PSTR("DS18B20: Error!\n\r"));
     //states[WARNING] = WARNING_DS18B20;
-    return;
+    //return;
   }
   
   if(read_BH1750() == false) {
