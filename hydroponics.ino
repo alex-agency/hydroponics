@@ -81,7 +81,7 @@ struct comparator {
     return strcmp(str1, str2) == 0;
   }
 };
-SimpleMap<const char*, int, 1, comparator> states;
+SimpleMap<const char*, int, 14, comparator> states;
 
 // Declare push buttons
 OneButton rightButton(A2, true);
@@ -346,7 +346,7 @@ bool read_BH1750() {
 
 void read_levels() {
   pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
-  if(digitalRead(S1_SUBSTRATEPIN) == 0) {
+  if(digitalRead(S1_SUBSTRATEPIN) == 1) {
     if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is full.\n\r"));
     states[S1_SUBSTRATE] = true;
   } else {
@@ -692,20 +692,20 @@ void showHomeScreen(uint8_t _homeItem) {
       fprintf(&lcdout, "Air: %c %2d%c %c %2d%%", temp_c, states[T_OUTSIDE],
         celcium_c, humidity_c, states[HUMIDITY]);
       break;
-    case 3:
+    case 4:
       fprintf(&lcdout, "Substrate: %c %2d%c", temp_c,
         states[T_SUBSTRATE], celcium_c);
       break;
-    case 6:
+    case 8:
       fprintf(&lcdout, "Light: %c %3d lux", lamp_c, states[LIGHT]);
       break;
-    case 9:
+    case 12:
       fprintf(&lcdout, "Computer:  %c %2d%c", temp_c, 
         states[T_INSIDE], celcium_c);
       break;
   }
 
-  if(homeItem >= 11)
+  if(homeItem >= 16)
     homeItem = 0;
   else
     homeItem++;
