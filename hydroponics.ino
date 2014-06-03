@@ -143,17 +143,13 @@ int serial_putc(char c, FILE *) {
 timer_t slow_timer(30000);
 timer_t fast_timer(1000);
 
-// Declare constants
-const uint16_t ONE_MINUTE = 60000;
-const uint32_t FIVE_MINUTES = 300000;
-
 // Declare variables
-uint32_t start_misting = 0;
-uint32_t last_misting = 0;
-uint32_t start_watering = 0;
-uint32_t last_watering = 0;
-uint32_t last_light = 0;
-uint8_t sunrise;
+uint16_t start_misting = 0;
+uint16_t last_misting = 0;
+uint16_t start_watering = 0;
+uint16_t last_watering = 0;
+uint16_t last_light = 0;
+uint16_t sunrise;
 
 
 //
@@ -210,7 +206,7 @@ void loop()
     }
     // LCD sleeping
     if(backlight && 
-      lastTouched+FIVE_MINUTES < (uint32_t)millis()) 
+      lastTouched+FIVE_MINUTES < seconds()) 
     {
       lcdBacklightToggle();
     }
@@ -227,7 +223,7 @@ void loop()
     if( states[WARNING] != NO_WARNING )
       lcdWarning();
     else if( menuItem != HOME 
-        && lastTouched+ONE_MINUTE < millis() )
+        && lastTouched+ONE_MINUTE < seconds() )
       lcdShowMenu(HOME);
     else if( menuEditMode )
       lcdEditMenu(menuItem, editCursor);
@@ -422,18 +418,24 @@ bool relays(const char* relay, uint8_t state) {
 
 /****************************************************************************/
 
+uint16_t seconds() {
+  return millis()/1000;
+}
+
+/****************************************************************************/
+
 /*void doMisting() {
   uint16_t duration = 3000;
   
   if(start_misting == 0) {
   	relayOn(P1_MISTING);
-  	start_misting = millis();
+  	start_misting = seconds();
   	states[WARNING] = WARNING_MISTING;
   	if(DEBUG) printf_P(PSTR("MISTING: Info: Start.\n\r"));
   	return;
   } 
 
-  if(start_misting > 0 && (millis() > start_misting + duration)) {
+  if(start_misting > 0 && (seconds() > start_misting + duration)) {
   	relayOff(P1_MISTING);
   	start_misting = -1;
   	states[WARNING] = NO_WARNING;
@@ -449,13 +451,13 @@ bool relays(const char* relay, uint8_t state) {
   
   if(start_watering == 0) {
   	relayOn(P2_WATERING);
-  	start_watering = millis();
+  	start_watering = seconds();
   	states[WARNING] = WARNING_WATERING;
   	if(DEBUG) printf_P(PSTR("WATERING: Info: Start.\n\r"));
   	return;
   }
 
-  if(start_watering > 0 && (millis() > start_watering + duration)) {
+  if(start_watering > 0 && (seconds() > start_watering + duration)) {
   	relayOff(P2_WATERING);
   	start_watering = 0;
   	states[WARNING] = WARNING_NO_SUBSTRATE;
@@ -482,11 +484,11 @@ void doLight() {
     relayOff(LAMP);
     // capture time
     if(last_light == 0) {
-      last_light = millis();
+      last_light = seconds();
       return;
     }
     // watch 30 minutes
-    if(millis() > last_light + (FIVE_MINUTES * 6) && 
+    if(seconds() > last_light + 1800 && 
         RTC.hour > 2 && RTC.hour <= 8) 
     {
       sunrise = states[DTIME]-30;
@@ -494,8 +496,8 @@ void doLight() {
         printf_P(PSTR("Light: Info: New sunrise hour is: %d\n\r"), sunrise/60);
       return;
     }
-    // default sunrise dtime
-    sunrise = 5*60;
+    // default sunrise at 5 o'clock
+    sunrise = 300; // minutes
     if(DEBUG_WORK) printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
     return;
   }
@@ -533,8 +535,8 @@ void system_check() {
   
   if(read_DHT11() == false) {
     printf_P(PSTR("DHT11: Error!\n\r"));
-    //states[WARNING] = WARNING_DHT11;
-    //return;
+    states[WARNING] = WARNING_DHT11;
+    return;
   }
   
   if(read_DS18B20() == false) {
@@ -553,45 +555,37 @@ void system_check() {
 /****************************************************************************/
 
 void doWork() {
-  uint32_t now = millis();
-
   // day time
   if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
-
-    if(now > last_watering + (settings.wateringDayPeriod * ONE_MINUTE)) {
+    if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
       //doWatering();
     }
-
-    if(now > last_misting + (settings.mistingDayPeriod * ONE_MINUTE)) {
+    if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
       //doMisting();
     }
-  } else
+    return;
+  }
+
   // night time 
   if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
-
-    if(now > last_watering + (settings.wateringNightPeriod * ONE_MINUTE)) {
+    if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
       //doWatering();
     }
-
-    if(now > last_misting + (settings.mistingNightPeriod * ONE_MINUTE)) {
+    if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
       //doMisting();
     }
-
     doLight();
-  } 
-  // sunrise or sunset time
-  else {
-
-    if(now > last_watering + (settings.wateringSunrisePeriod * ONE_MINUTE)) {
-      //doWatering();
-    }
-
-    if(now > last_misting + (settings.mistingSunrisePeriod * ONE_MINUTE)) {
-      //doMisting();
-    }
-
-    doLight();
+    return;
   }
+
+  // sunrise or sunset time
+  if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
+    //doWatering();
+  }
+  if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
+    //doMisting();
+  }
+  doLight();
 }
 
 /****************************************************************************/
@@ -607,85 +601,85 @@ void lcdShowMenu(uint8_t _menuItem) {
   lcd.home();
   switch (menuItem) {
     case HOME:
-      showHomeScreen(homeItem);
-      break;
+      showHomeScreen();
+      return;
     case WATERING_DAY:
       fprintf(&lcdout, "Watering daytime"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %3d min   ", settings.wateringDayPeriod);
-      break;
+      return;
     case WATERING_NIGHT:
       fprintf(&lcdout, "Watering night  "); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %3d min   ", settings.wateringNightPeriod);
-      break;
+      return;
     case WATERING_SUNRISE:
       fprintf(&lcdout, "Watering sunrise"); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %3d min   ", settings.wateringSunrisePeriod);
-      break;
+      return;
     case MISTING_DAY:
       fprintf(&lcdout, "Misting daytime "); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %3d min   ", settings.mistingDayPeriod);
-      break;
+      return;
     case MISTING_NIGHT:
       fprintf(&lcdout, "Misting night   "); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %3d min   ", settings.mistingNightPeriod);
-      break;
+      return;
     case MISTING_SUNRISE:
       fprintf(&lcdout, "Misting sunrise "); lcd.setCursor(0,1);
       fprintf(&lcdout, "every %3d min   ", settings.mistingSunrisePeriod);
-      break;
+      return;
     case DAY_TIME:
       fprintf(&lcdout, "Day time        "); lcd.setCursor(0,1);
       fprintf(&lcdout, "from %2dh to %2dh ", 
         settings.daytimeFrom, settings.daytimeTo);
-      break;
+      return;
     case NIGHT_TIME:
       fprintf(&lcdout, "Night time      "); lcd.setCursor(0,1);
       fprintf(&lcdout, "from %2dh to %2dh ", 
         settings.nighttimeFrom, settings.nighttimeTo);
-      break;
+      return;
     case LIGHT_THRESHOLD:
       fprintf(&lcdout, "Light on when   "); lcd.setCursor(0,1);
       fprintf(&lcdout, "lower %3d lux   ", settings.lightThreshold);
-      break;
+      return;
     case LIGHT_DAY:
       fprintf(&lcdout, "Light day       "); lcd.setCursor(0,1);
       fprintf(&lcdout, "duration %2dh    ", settings.lightDayDuration);
-      break;
+      return;
     case HUMIDITY_THRESHOLD:
       fprintf(&lcdout, "Humidity not    "); lcd.setCursor(0,1);
       fprintf(&lcdout, "less than %2d%%   ", settings.humidThreshold);
-      break;
+      return;
     case T_OUTSIDE_THRESHOLD:
       fprintf(&lcdout, "Temp. air not   "); lcd.setCursor(0,1);
       fprintf(&lcdout, "less than %2d%c   ", 
         settings.tempThreshold, celcium_c);
-      break;
+      return;
     case T_SUBSTRATE_THRESHOLD:
       fprintf(&lcdout, "Substrate temp. "); lcd.setCursor(0,1);
       fprintf(&lcdout, "less than %2d%c   ", 
         settings.tempSubsThreshold, celcium_c);
-      break;
+      return;
     case CLOCK:
       fprintf(&lcdout, "Time:   %02d:%02d:%02d", 
-        RTC.hour, RTC.minute, RTC.second); 
-      lcd.setCursor(0,1);
+        RTC.hour, RTC.minute, RTC.second); lcd.setCursor(0,1);
       fprintf(&lcdout, "Date: %02d-%02d-%4d", RTC.day, RTC.month, RTC.year);
-      break;
+      return;
     default:
       menuItem = HOME;
   }
 }
 
-void showHomeScreen(uint8_t _homeItem) {
+void showHomeScreen() {
   if(DEBUG_LCD) 
-    printf_P(PSTR("LCD Panel: Info: Home screen #%d.\n\r"), _homeItem);
-  // save state
-  homeItem = _homeItem;
+    printf_P(PSTR("LCD Panel: Info: Home screen #%d.\n\r"), homeItem);
 
   fprintf(&lcdout, "%c%c%c%c%c%c%c    %02d:%02d", flower_c, flower_c, 
     flower_c, flower_c, heart_c, flower_c, heart_c, RTC.hour, RTC.minute);
   lcdTextBlink(0, 13, 13);
   lcd.setCursor(0,1);
+
+  if(homeItem >= 16)
+    homeItem = 0;
   
   switch (homeItem) {
     case 0:
@@ -705,10 +699,7 @@ void showHomeScreen(uint8_t _homeItem) {
       break;
   }
 
-  if(homeItem >= 16)
-    homeItem = 0;
-  else
-    homeItem++;
+  homeItem++;
 }
 
 /****************************************************************************/
@@ -794,14 +785,14 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
   }
 }
 
-uint8_t lcdEditMenuChangingPeriod(uint8_t _period) {
+bool lcdEditMenuChangingPeriod(uint8_t _period) {
   fprintf(&lcdout, "Changing period "); lcd.setCursor(0,1);
   fprintf(&lcdout, "every %3d min.    ", _period);
   lcdTextBlink(1, 6, 8);
   return 0;
 }
 
-uint8_t lcdEditMenuChangingRange(uint8_t _from, uint8_t _to) {
+bool lcdEditMenuChangingRange(uint8_t _from, uint8_t _to) {
   fprintf(&lcdout, "Changing range  "); lcd.setCursor(0,1);
   fprintf(&lcdout, "from %2dh to %2dh ", _from, _to);
   if(editCursor == 1) {
@@ -826,66 +817,66 @@ void lcdWarning() {
       fprintf(&lcdout, "Can’t misting!  "); lcd.setCursor(0,1);
       fprintf(&lcdout, "No water! :(    ");
       lcdTextBlink(1, 0, 12);
-      break;
+      return;
     case WARNING_SUBSTRATE_FULL:
       fprintf(&lcdout, "Substrate tank  "); lcd.setCursor(0,1);
       fprintf(&lcdout, "is full! :)))   ");
-      break;
+      return;
     case WARNING_SUBSTRATE_LOW:
       fprintf(&lcdout, "Low substrate!  "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Please add water");
       lcdTextBlink(1, 0, 15);
-      break;
+      return;
     case WARNING_NO_SUBSTRATE:
       fprintf(&lcdout, "Can't watering! "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Plants can die! ");
       lcdTextBlink(1, 0, 14);
-      break;
+      return;
     case WARNING_WATERING_DONE:
       fprintf(&lcdout, "Watering done! :)"); lcd.setCursor(0,1);
       fprintf(&lcdout, "Please wait: %2d m", 10);
       lcdTextBlink(1, 13, 14);
-      break;
+      return;
     case WARNING_WATERING:
       fprintf(&lcdout, "Watering...     "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Please wait.    ");
       lcdTextBlink(1, 0, 11);
-      break;
+      return;
     case WARNING_MISTING:
       fprintf(&lcdout, "Misting...      "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Please wait.    ");
       lcdTextBlink(1, 0, 11);
-      break;
+      return;
     case WARNING_TEMPERATURE_COLD:
       fprintf(&lcdout, "Air is too cold "); lcd.setCursor(0,1);
       fprintf(&lcdout, "for plants! :(  ");
       lcdTextBlink(1, 12, 13);
-      break;
+      return;
     case WARNING_SUBSTRATE_COLD:
       fprintf(&lcdout, "Substrate is too"); lcd.setCursor(0,1);
       fprintf(&lcdout, "cold! :(        ");
       lcdTextBlink(1, 6, 7);
-      break;
+      return;
     case WARNING_EEPROM:
       fprintf(&lcdout, "EEPROM ERROR!   "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Settings reset! ");
       lcdTextBlink(1, 0, 14);
-      break;
+      return;
     case WARNING_DHT11:
       fprintf(&lcdout, "DHT11 ERROR!    "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Check connection");
       lcdTextBlink(1, 0, 15);
-      break;
+      return;
     case WARNING_DS18B20:
       fprintf(&lcdout, "DS18B20 ERROR!  "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Check connection");
       lcdTextBlink(1, 0, 15);
-      break;
+      return;
     case WARNING_BH1750:
       fprintf(&lcdout, "BH1750 ERROR!   "); lcd.setCursor(0,1);
       fprintf(&lcdout, "Check connection");
       lcdTextBlink(1, 0, 15);
-      break;
+      return;
   }  
 }
 
@@ -908,7 +899,7 @@ void lcdBacklightToggle() {
 
 /****************************************************************************/
 
-void lcdTextBlink(uint8_t _row, uint8_t _start, uint8_t _end) { 
+void lcdTextBlink(bool _row, uint8_t _start, uint8_t _end) { 
   if(blink) {
     if(DEBUG_LCD) 
       printf_P(PSTR("LCD Panel: Info: Blink: row #%d from %d to %d.\n\r"),
@@ -930,7 +921,7 @@ void leftButtonClick() {
   if(DEBUG_LCD)   
     printf_P(PSTR("LCD Panel: Info: Left button click: Menu #%d, Cursor #%d.\n\r"),
       menuItem, editCursor);
-  lastTouched = millis();
+  lastTouched = seconds();
   // enable backlight
   if(backlight == false) {
     lcdBacklightToggle();
@@ -950,49 +941,49 @@ void leftButtonClick() {
   switch (menuItem) {
     case WATERING_DAY:
       settings.wateringDayPeriod--;
-      break;
+      return;
     case WATERING_NIGHT:
       settings.wateringNightPeriod--;
-      break;
+      return;
     case WATERING_SUNRISE:
       settings.wateringSunrisePeriod--;
-      break;
+      return;
     case MISTING_DAY:
       settings.mistingDayPeriod--;
-      break;
+      return;
     case MISTING_NIGHT:
       settings.mistingNightPeriod--;
-      break;
+      return;
     case MISTING_SUNRISE:
       settings.mistingSunrisePeriod--;
-      break;
+      return;
     case DAY_TIME:
       if(editCursor == 1)
         settings.daytimeFrom--;
       else
         settings.daytimeTo--;
-      break;
+      return;
     case NIGHT_TIME:
       if(editCursor == 1)
         settings.nighttimeFrom--;
       else
         settings.nighttimeTo--;
-      break;
+      return;
     case LIGHT_THRESHOLD:
       settings.lightThreshold--;
-      break;
+      return;
     case LIGHT_DAY:
       settings.lightDayDuration--;
-      break;
+      return;
     case HUMIDITY_THRESHOLD:
       settings.humidThreshold--;
-      break;
+      return;
     case T_OUTSIDE_THRESHOLD:
       settings.tempThreshold--;
-      break;
+      return;
     case T_SUBSTRATE_THRESHOLD:
       settings.tempSubsThreshold--;
-      break;
+      return;
     case CLOCK:
       storage.changed = false;
       RTC.stopClock();
@@ -1014,7 +1005,7 @@ void leftButtonClick() {
       } else {
         RTC.year--;
       }
-      break;
+      return;
     default:
       menuItem = HOME;
   }
@@ -1026,7 +1017,7 @@ void rightButtonClick() {
   if(DEBUG_LCD)
     printf_P(PSTR("LCD Panel: Info: Right button click: Menu #%d, Cursor #%d.\n\r"),
       menuItem, editCursor);
-  lastTouched = millis();
+  lastTouched = seconds();
   // enable backlight
   if(backlight == false) {
     lcdBacklightToggle();
@@ -1046,49 +1037,49 @@ void rightButtonClick() {
   switch (menuItem) {
     case WATERING_DAY:
       settings.wateringDayPeriod++;
-      break;
+      return;
     case WATERING_NIGHT:
       settings.wateringNightPeriod++;
-      break;
+      return;
     case WATERING_SUNRISE:
       settings.wateringSunrisePeriod++;
-      break;
+      return;
     case MISTING_DAY:
       settings.mistingDayPeriod++;
-      break;
+      return;
     case MISTING_NIGHT:
       settings.mistingNightPeriod++;
-      break;
+      return;
     case MISTING_SUNRISE:
       settings.mistingSunrisePeriod++;
-      break;
+      return;
     case DAY_TIME:
       if(editCursor == 1)
         settings.daytimeFrom++;
       else
         settings.daytimeTo++;
-      break;
+      return;
     case NIGHT_TIME:
       if(editCursor == 1)
         settings.nighttimeFrom++;
       else
         settings.nighttimeTo++;
-      break;
+      return;
     case LIGHT_THRESHOLD:
       settings.lightThreshold++;
-      break;
+      return;
     case LIGHT_DAY:
       settings.lightDayDuration++;
-      break;
+      return;
     case HUMIDITY_THRESHOLD:
       settings.humidThreshold++;
-      break;
+      return;
     case T_OUTSIDE_THRESHOLD:
       settings.tempThreshold++;
-      break;
+      return;
     case T_SUBSTRATE_THRESHOLD:
       settings.tempSubsThreshold++;
-      break;
+      return;
     case CLOCK:
       storage.changed = false;
       RTC.stopClock();
@@ -1111,7 +1102,7 @@ void rightButtonClick() {
       } else {
         RTC.year++;
       }
-      break;
+      return;
     default:
       menuItem = HOME;
   }
@@ -1123,7 +1114,6 @@ void buttonsLongPress() {
   if(DEBUG_LCD) 
    	printf_P(PSTR("LCD Panel: Info: Button long press: Menu #%d.\n\r"),
       menuItem);
-  lastTouched = millis();
   // action for simple Menu
   if(menuEditMode == false) {
     // enter to Edit Menu and return edit field
