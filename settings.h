@@ -4,8 +4,7 @@
 
 #include <avr/eeprom.h>
 
-// Debug info
-#define DEBUG  false
+//#define DEBUG
 
 #define EEPROM_SIZE  256 
 #define EEPROM_OFFSET  false
@@ -31,6 +30,14 @@ struct SettingsStruct {
   SETTINGS_ID
 }, memory;
 
+// Avoid spurious warnings
+#if ! defined( NATIVE ) && defined( ARDUINO )
+#undef PROGMEM
+#define PROGMEM __attribute__(( section(".progmem.data") ))
+#undef PSTR
+#define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
+#endif
+
 
 class EEPROM 
 {
@@ -44,13 +51,12 @@ class EEPROM
         //read a struct sized block from the EEPROM
         readBlock(address_offset, memory);
         if (strcmp(memory.id, SETTINGS_ID) == 0) {
-	  // load settings
-	  settings = memory;
-          if(DEBUG)
-            printf_P(PSTR("EEPROM: Info: Settings loaded from address: %d.\n\r"),
-              address_offset);
+	        // load settings
+	        settings = memory;
+          DEBUG(printf_P(PSTR("EEPROM: Info: Settings loaded from address: %d.\n\r"),
+            address_offset));
           return true;
-	}
+	      }
         address_offset++;
       } 
       printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
@@ -76,10 +82,9 @@ class EEPROM
       }
 
       if(updateCount == sizeof(settings)) {
-	if(DEBUG) 
-          printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
-           address_offset);
-	return true;
+	DEBUG(printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
+           address_offset));
+	      return true;
       }
       printf_P(PSTR("EEPROM: Error: Settings isn't saved at %d address!\n\r"), 
         address_offset);
@@ -98,7 +103,7 @@ class EEPROM
       const uint8_t* bytePointer = (const uint8_t*)(void*)&_value;
       for(uint8_t i = 0; i < sizeof(_value); i++) {
         if (eeprom_read_byte((uint8_t*)_address) != *bytePointer) {
-          if(DEBUG) printf_P(PSTR("writing: %d\n\r"), *bytePointer);
+          DEBUG(printf_P(PSTR("writing: %d\n\r"), *bytePointer));
           //do the actual EEPROM writing
           eeprom_write_byte((uint8_t*)_address, *bytePointer);
           writeCount++; 
@@ -110,8 +115,7 @@ class EEPROM
       }
       printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), 
         writeCount);
-      if(DEBUG) printf_P(PSTR("EEPROM: Info: %d bytes not changed!\n\r"), 
-        skipCount);
+      DEBUG(printf_P(PSTR("EEPROM: Info: %d bytes not changed!\n\r"), skipCount));
       return writeCount + skipCount;
     }
 };

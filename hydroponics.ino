@@ -12,9 +12,9 @@
 #include "LiquidCrystal_I2C.h"
 
 // Debug info
-#define DEBUG  true
-#define DEBUG_LCD  false
-#define DEBUG_WORK  true
+//#define DEBUG
+//#define DEBUG_LCD
+//#define DEBUG_WORK
 
 // Declare settings
 EEPROM storage;
@@ -90,7 +90,7 @@ OneButton leftButton(A3, true);
 // Declare LCD1609
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // Declare fprintf
-int lcd_putc(char c, FILE *) {
+uint8_t lcd_putc(char c, FILE *) {
   lcd.write(c);
   return c;
 };
@@ -120,21 +120,21 @@ uint32_t lastTouched = 0;
 #define T_SUBSTRATE_THRESHOLD  13
 #define CLOCK  14
 // Declare custom characters
-byte celcium_char[8] = {24, 24, 3, 4, 4, 4, 3, 0};
-const uint8_t celcium_c = 0;
-byte heart_char[8] = {0, 10, 21, 17, 10, 4, 0, 0};
-const uint8_t heart_c = 1;
-byte humidity_char[8] = {4, 10, 10, 17, 17, 17, 14, 0};
-const uint8_t humidity_c = 2;
-byte temp_char[8] = {4, 10, 10, 14, 31, 31, 14, 0};
-const uint8_t temp_c = 3;
-byte flower_char[8] = {14, 27, 21, 14, 4, 12, 4, 0};
-const uint8_t flower_c = 4;
-byte lamp_char[8] = {14, 17, 17, 17, 14, 14, 4, 0};
-const uint8_t lamp_c = 5;
+const byte celcium_char[8] PROGMEM = {24, 24, 3, 4, 4, 4, 3, 0};
+const uint8_t celcium_c PROGMEM = 0;
+const byte heart_char[8] PROGMEM = {0, 10, 21, 17, 10, 4, 0, 0};
+const uint8_t heart_c PROGMEM = 1;
+const byte humidity_char[8] PROGMEM = {4, 10, 10, 17, 17, 17, 14, 0};
+const uint8_t humidity_c PROGMEM = 2;
+const byte temp_char[8] PROGMEM = {4, 10, 10, 14, 31, 31, 14, 0};
+const uint8_t temp_c PROGMEM = 3;
+const byte flower_char[8] PROGMEM = {14, 27, 21, 14, 4, 12, 4, 0};
+const uint8_t flower_c PROGMEM = 4;
+const byte lamp_char[8] PROGMEM = {14, 17, 17, 17, 14, 14, 4, 0};
+const uint8_t lamp_c PROGMEM = 5;
 
 // Declare PSTR
-int serial_putc(char c, FILE *) {
+uint8_t serial_putc(char c, FILE *) {
   Serial.write(c);
   return c;
 };
@@ -204,9 +204,9 @@ void loop()
       storage_ok = storage.save();
       storage.changed = false;
     }
-    // LCD sleeping
+    // LCD sleeping after 5 min
     if(backlight && 
-      lastTouched+FIVE_MINUTES < seconds()) 
+      lastTouched+300 < seconds()) 
     {
       lcdBacklightToggle();
     }
@@ -223,7 +223,7 @@ void loop()
     if( states[WARNING] != NO_WARNING )
       lcdWarning();
     else if( menuItem != HOME 
-        && lastTouched+ONE_MINUTE < seconds() )
+        && lastTouched+60 < seconds() )
       lcdShowMenu(HOME);
     else if( menuEditMode )
       lcdEditMenu(menuItem, editCursor);
@@ -246,10 +246,12 @@ void read_RTC() {
   states[CDN] = RTC.cdn;
   states[DTIME] = RTC.hour*60+RTC.minute;
 
-  if(DEBUG) 
-    printf_P(PSTR("RTC: Info: CDN: %d %02d-%02d-%4d, DTIME: %d %02d:%02d:%02d.\n\r"), 
-              states[CDN], RTC.day, RTC.month, RTC.year, 
-              states[DTIME], RTC.hour, RTC.minute, RTC.second);
+  #ifdef DEBUG
+    printf_P(
+      PSTR("RTC: Info: CDN: %d %02d-%02d-%4d, DTIME: %d %02d:%02d:%02d.\n\r"), 
+        states[CDN], RTC.day, RTC.month, RTC.year, 
+        states[DTIME], RTC.hour, RTC.minute, RTC.second);
+  #endif
 }
 
 /****************************************************************************/
@@ -286,9 +288,10 @@ bool read_DHT11() {
     case DHTLIB_OK:
       states[HUMIDITY] = DHT11.humidity;
       states[T_OUTSIDE] = DHT11.temperature;
-      if(DEBUG) 
-      	printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
-      	states[HUMIDITY], states[T_OUTSIDE]);
+      #ifdef DEBUG
+        printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
+      	  states[HUMIDITY], states[T_OUTSIDE]));
+      #endif
       return true;
     default: 
       printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
@@ -309,7 +312,9 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
     return false;
   }
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
+  #ifdef DEBUG
+    printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value));
+  #endif
   states[T_INSIDE] = value;
   
   value = dallas.getTempCByIndex(1);
@@ -317,7 +322,9 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
     return false;
   }
-  if(DEBUG) printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
+  #ifdef DEBUG
+    printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value));
+  #endif
   states[T_SUBSTRATE] = value;
   return true;
 }
@@ -333,7 +340,9 @@ bool read_BH1750() {
     printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
     return false;
   }
-  if(DEBUG) printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), value);
+  #ifdef DEBUG
+    printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), value));
+  #endif
   states[LIGHT] = value;
   return true;
 }
@@ -343,29 +352,41 @@ bool read_BH1750() {
 void read_levels() {
   pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
   if(digitalRead(S1_SUBSTRATEPIN) == 1) {
-    if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is full.\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("LEVELS: Info: Substrate tank is full.\n\r"));
+    #endif
     states[S1_SUBSTRATE] = true;
   } else {
-    if(DEBUG) printf_P(PSTR("LEVELS: Info: Substrate tank is not full!\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("LEVELS: Info: Substrate tank is not full!\n\r"));
+    #endif
     states[S1_SUBSTRATE] = false;
   }
   
   pinMode(S2_WATERINGPIN, INPUT_PULLUP);
   if(digitalRead(S2_WATERINGPIN) == 1) {
-    if(DEBUG) printf_P(PSTR("LEVELS: Info: Watering has done.\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("LEVELS: Info: Watering has done.\n\r"));
+    #endif
     states[S2_WATERING] = true;
   } else {
-    if(DEBUG) printf_P(PSTR("LEVELS: Info: No watering.\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("LEVELS: Info: No watering.\n\r"));
+    #endif
     states[S2_WATERING] = false;
   }
   
   // no pull-up for A6 and A7
   pinMode(S4_MISTINGPIN, INPUT);
   if(analogRead(S4_MISTINGPIN) < 150) {
-    if(DEBUG) printf_P(PSTR("LEVELS: Info: Misting water sensor active.\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("LEVELS: Info: Misting water sensor active.\n\r"));
+    #endif
     states[S4_MISTING] = true;
   } else {
-    if(DEBUG) printf_P(PSTR("LEVELS: Info: No water for misting!\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("LEVELS: Info: No water for misting!\n\r"));
+    #endif
     states[S4_MISTING] = false;
   }
 }
@@ -379,7 +400,7 @@ void relayOn(const char* relay) {
   }
   bool status = relays(relay, 0); // 0 is ON
   if(status) {
-    if(DEBUG) printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay);
+    DEBUG(printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay));
     states[relay] = true;
   }
 }
@@ -391,7 +412,7 @@ void relayOff(const char* relay) {
   }
   bool status = relays(relay, 1); // 1 is OFF
   if(status) {
-    if(DEBUG) printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay);
+    DEBUG(printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay));
     states[relay] = false;
   }
 }
@@ -442,7 +463,7 @@ uint16_t seconds() {
   	if(DEBUG) printf_P(PSTR("MISTING: Info: Stop.\n\r"));
   	return;
   }
-}
+}*/
 
 /****************************************************************************/
 
@@ -470,13 +491,13 @@ uint16_t seconds() {
     return;
   }
 
-}
+}*/
 
 /****************************************************************************/
 
 void doLight() {
-  if(DEBUG_WORK) printf_P(PSTR("Light: Info: Light intensity: %d lux.\n\r"),
-      states[LIGHT]);
+  DEBUG_WORK(printf_P(PSTR("Light: Info: Light intensity: %d lux.\n\r"),
+      states[LIGHT]));
 
   // light enough 
   if(states[LIGHT] > settings.lightThreshold) {
@@ -492,21 +513,20 @@ void doLight() {
         RTC.hour > 2 && RTC.hour <= 8) 
     {
       sunrise = states[DTIME]-30;
-      if(DEBUG_WORK) 
-        printf_P(PSTR("Light: Info: New sunrise hour is: %d\n\r"), sunrise/60);
+      DEBUG_WORK(printf_P(PSTR("Light: Info: New sunrise hour is: %d\n\r"), 
+        sunrise/60));
       return;
     }
     // default sunrise at 5 o'clock
     sunrise = 300; // minutes
-    if(DEBUG_WORK) printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
+    DEBUG_WORK(printf_P(PSTR("Light: Info: Set default sunrise time.\n\r")));
     return;
   }
   
   uint16_t light_off_threshold = sunrise + (settings.lightDayDuration*60);
-  if(sunrise > 0 && states[DTIME] <= light_off_threshold) {
-    if(DEBUG_WORK) 
-      printf_P(PSTR("Light: Info: Lamp on till %d hour.\n\r"), 
-        light_off_threshold/60);
+  if(sunrise > 0 && (uint8_t)states[DTIME] <= light_off_threshold) {
+    DEBUG_WORK(printf_P(PSTR("Light: Info: Lamp on till %d hour.\n\r"), 
+        light_off_threshold/60));
     // turn on lamp
     relayOn(LAMP);
     return;
@@ -591,8 +611,7 @@ void doWork() {
 /****************************************************************************/
 
 void lcdShowMenu(uint8_t _menuItem) {
-  if(DEBUG_LCD)  
-    printf_P(PSTR("LCD Panel: Info: Show menu #%d.\n\r"), _menuItem);
+  DEBUG_LCD(printf_P(PSTR("LCD Panel: Info: Show menu #%d.\n\r"), _menuItem));
   // save state
   menuEditMode = false;
   if(_menuItem == 255) menuItem = CLOCK;  
@@ -670,8 +689,7 @@ void lcdShowMenu(uint8_t _menuItem) {
 }
 
 void showHomeScreen() {
-  if(DEBUG_LCD) 
-    printf_P(PSTR("LCD Panel: Info: Home screen #%d.\n\r"), homeItem);
+  DEBUG_LCD(printf_P(PSTR("LCD Panel: Info: Home screen #%d.\n\r"), homeItem));
 
   fprintf(&lcdout, "%c%c%c%c%c%c%c    %02d:%02d", flower_c, flower_c, 
     flower_c, flower_c, heart_c, flower_c, heart_c, RTC.hour, RTC.minute);
@@ -705,9 +723,9 @@ void showHomeScreen() {
 /****************************************************************************/
 
 uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
-  if(DEBUG_LCD) 
-  	printf_P(PSTR("LCD Panel: Info: Edit menu #%d with cursor #%d.\n\r"), 
-      _menuItem, _editCursor);
+  DEBUG_LCD(
+    printf_P(PSTR("LCD Panel: Info: Edit menu #%d with cursor #%d.\n\r"), 
+      _menuItem, _editCursor));
   // save state
   menuEditMode = true;
   menuItem = _menuItem;
@@ -806,8 +824,8 @@ bool lcdEditMenuChangingRange(uint8_t _from, uint8_t _to) {
 /****************************************************************************/
 
 void lcdWarning() {
-  if(DEBUG_LCD) printf_P(PSTR("LCD Panel: Info: Show Warning #%d.\n\r"), 
-  	states[WARNING]);
+  DEBUG_LCD(printf_P(PSTR("LCD Panel: Info: Show Warning #%d.\n\r"),
+    states[WARNING]));
   // backlight blink
   lcdBacklightBlink(1);
   
@@ -901,9 +919,9 @@ void lcdBacklightToggle() {
 
 void lcdTextBlink(bool _row, uint8_t _start, uint8_t _end) { 
   if(blink) {
-    if(DEBUG_LCD) 
+    DEBUG_LCD( 
       printf_P(PSTR("LCD Panel: Info: Blink: row #%d from %d to %d.\n\r"),
-        _row, _start, _end); 
+        _row, _start, _end)); 
     
     while(_start <= _end) {
       lcd.setCursor(_start, _row); lcd.print(" ");
@@ -918,9 +936,9 @@ void lcdTextBlink(bool _row, uint8_t _start, uint8_t _end) {
 /****************************************************************************/
 
 void leftButtonClick() {
-  if(DEBUG_LCD)   
+  DEBUG_LCD(   
     printf_P(PSTR("LCD Panel: Info: Left button click: Menu #%d, Cursor #%d.\n\r"),
-      menuItem, editCursor);
+      menuItem, editCursor));
   lastTouched = seconds();
   // enable backlight
   if(backlight == false) {
@@ -1014,9 +1032,9 @@ void leftButtonClick() {
 /****************************************************************************/
 
 void rightButtonClick() {
-  if(DEBUG_LCD)
+  DEBUG_LCD(
     printf_P(PSTR("LCD Panel: Info: Right button click: Menu #%d, Cursor #%d.\n\r"),
-      menuItem, editCursor);
+      menuItem, editCursor));
   lastTouched = seconds();
   // enable backlight
   if(backlight == false) {
@@ -1083,7 +1101,7 @@ void rightButtonClick() {
     case CLOCK:
       storage.changed = false;
       RTC.stopClock();
-      if(DEBUG_LCD) printf_P(PSTR("LCD Panel: Info: Stop clock.\n\r"));
+      DEBUG_LCD(printf_P(PSTR("LCD Panel: Info: Stop clock.\n\r")));
       if(editCursor == 4) {
         if(RTC.hour < 23)
           RTC.hour++;
@@ -1111,9 +1129,9 @@ void rightButtonClick() {
 /****************************************************************************/
 
 void buttonsLongPress() {
-  if(DEBUG_LCD) 
+  DEBUG_LCD( 
    	printf_P(PSTR("LCD Panel: Info: Button long press: Menu #%d.\n\r"),
-      menuItem);
+      menuItem));
   // action for simple Menu
   if(menuEditMode == false) {
     // enter to Edit Menu and return edit field
@@ -1131,7 +1149,7 @@ void buttonsLongPress() {
   } 
   // save changed time
   if(menuItem == CLOCK) {
-    if(DEBUG_LCD) printf_P(PSTR("LCD Panel: Info: Set new time.\n\r"));
+    DEBUG_LCD(printf_P(PSTR("LCD Panel: Info: Set new time.\n\r")));
     RTC.setTime();
     RTC.startClock();
   }

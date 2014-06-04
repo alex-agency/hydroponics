@@ -112,13 +112,13 @@ class SimpleMap
     }
 
     const char* toString() const {
-      static char buffer[128];
+      static char buffer[30];
       strcpy(buffer, "{");
       for(uint8_t i=0; i<currentIndex; i++) {
         if (i > 0) {
           strcat(buffer, ", ");
         }
-        sprintf(buffer,"%s?=%d", buffer, values[i]); 
+        snprintf_P(buffer,sizeof(buffer),PSTR("%s?=%d"),buffer, values[i]);
       }
       strcat(buffer, "}");
       return buffer; 
