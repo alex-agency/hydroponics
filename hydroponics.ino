@@ -76,6 +76,8 @@ uint16_t sunrise_dtime;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t last_touch = 0;
+uint16_t start_misting = 0;
+uint16_t start_watering = 0;
 bool menuEditMode;
 uint8_t menuEditCursor;
 uint8_t menuItem;
@@ -98,6 +100,7 @@ bool lcdBacklight = true;
 #define P2_WATERING  "p2 watering"
 #define LAMP  "lamp"
 #define WARNING  "warning"
+#define ERROR  "error"
 
 // Declare warning states
 #define NO_WARNING  0
@@ -110,11 +113,14 @@ bool lcdBacklight = true;
 #define WARNING_MISTING  7
 #define WARNING_AIR_COLD  8
 #define WARNING_SUBSTRATE_COLD  9
-#define WARNING_EEPROM  10
-#define WARNING_DHT11  11
-#define WARNING_DS18B20  12
-#define WARNING_BH1750  13
-#define WARNING_LOW_MEMORY  14
+
+// Declare error states
+#define NO_ERROR  0
+#define ERROR_LOW_MEMORY  11
+#define ERROR_EEPROM  12
+#define ERROR_DHT11  13
+#define ERROR_DS18B20  14
+#define ERROR_BH1750  15
 
 // Declare LCD menu items
 #define HOME  0
@@ -173,7 +179,7 @@ void setup()
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
-  delay(1000);
+  delay(500);
   // restart if memory lower 512 bytes
   softResetMem(512);
   // restart after freezing
@@ -189,9 +195,6 @@ void setup()
   leftButton.attachClick( leftButtonClick );
   leftButton.attachDoubleClick( leftButtonClick );
   leftButton.attachLongPressStart( buttonsLongPress );
-  
-  // read modules and check errors
-  system_check();
 }
 
 //
@@ -210,7 +213,8 @@ void loop()
       read_RTC();
     }
     // manage LCD
-    if( states[WARNING] != NO_WARNING )
+    if( states[WARNING] != NO_WARNING ||
+        states[ERROR] != NO_ERROR )
       lcdWarning();
     else if( menuItem != HOME 
         && last_touch+60 < seconds() )
@@ -222,8 +226,8 @@ void loop()
   }
 
   if(slow_timer) {
-    // read modules and check errors
-    system_check();
+    // read values and check errors
+    read_check();
     // main program
     doWork();
     // save settings
@@ -416,8 +420,85 @@ bool relays(const char* relay, uint8_t state) {
   return false;
 }
 
+void read_check() {
+  #ifdef DEBUG
+    printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
+  #endif
+  // check memory
+  if(freeMemory() < 600) {
+    printf_P(PSTR("ERROR: Low memory!!!\n\r"));
+    states[ERROR] = ERROR_LOW_MEMORY;
+    return;
+  }
+  // check EEPROM
+  if(storage_ok == false) {
+    states[ERROR] = ERROR_EEPROM;
+    return;
+  }
+  // check and read DHT11 sensor
+  if(read_DHT11() == false) {
+    states[ERROR] = ERROR_DHT11;
+    return;
+  }
+  // check and read DS18B20 sensor
+  if(read_DS18B20() == false) {
+    //states[ERROR] = ERROR_DS18B20;
+    //return;
+  }
+  // check and read BH1750 sensor
+  if(read_BH1750() == false) {
+    states[ERROR] = ERROR_BH1750;
+    return;
+  }
+  // no errors
+  states[ERROR] = NO_ERROR;
+  // check water tank
+  if(states[S4_MISTING] == false) {
+    states[WARNING] = WARNING_NO_WATER;
+    return;
+  }
+  // no warnings
+  states[WARNING] = NO_WARNING;
+}
+
 uint16_t seconds() {
   return millis()/1000;
+}
+
+void doWork() {
+  // don't do any work
+  if(states[ERROR] != NO_ERROR) {
+    return;
+  }
+  // manage light
+  doLight();
+  // day time
+  if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
+    if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
+      doWatering();
+    }
+    if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
+      doMisting();
+    }
+    return;
+  }
+  // night time 
+  if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
+    if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
+      doWatering();
+    }
+    if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
+      doMisting();
+    }
+    return;
+  }
+  // sunrise or sunset time
+  if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
+    doWatering();
+  }
+  if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
+    doMisting();
+  }
 }
 
 void doLight() {
@@ -465,76 +546,56 @@ void doLight() {
   relayOff(LAMP);
 }
 
-void system_check() {
-  if(freeMemory() < 600) {
-    printf_P(PSTR("ERROR: Low memory!!!\n\r"));
-    states[WARNING] = WARNING_LOW_MEMORY;
-  }
-  #ifdef DEBUG
-    printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
-  #endif
-
-  if(storage_ok == false) {
-    states[WARNING] = WARNING_EEPROM;
+void doMisting() {
+  if(states[WARNING] != NO_WARNING)
+    return;
+  states[WARNING] = WARNING_MISTING;
+  // start misting
+  if(start_misting == 0) {
+    relayOn(P1_MISTING);
+    start_misting = seconds();
     return;
   }
-  
-  read_RTC();
-  if(RTC.year < 2014 || RTC.year > 2018) {
-    lcdEditMenu(CLOCK, 4);
+  // off after 10 sec
+  if(start_misting+10 < seconds()) {
+    relayOff(P1_MISTING);
+    last_misting = seconds();
+    start_misting = 0;
     return;
   }
-  
-  if(read_DHT11() == false) {
-    states[WARNING] = WARNING_DHT11;
-    return;
-  }
-  
-  if(read_DS18B20() == false) {
-    //states[WARNING] = WARNING_DS18B20;
-    //return;
-  }
-  
-  if(read_BH1750() == false) {
-    states[WARNING] = WARNING_BH1750;
-    return;
-  }
-
-  states[WARNING] = NO_WARNING;
 }
 
-void doWork() {
-  // day time
-  if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
-    if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
-      //doWatering();
-    }
-    if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
-      //doMisting();
-    }
+void doWatering() {
+  if(states[WARNING] != NO_WARNING)
+    return;
+  states[WARNING] = WARNING_WATERING;
+  // start watering
+  if(start_watering == 0) {
+    relayOn(P2_WATERING);
+    start_watering = seconds();
     return;
   }
-
-  // night time 
-  if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
-    if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
-      //doWatering();
-    }
-    if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
-      //doMisting();
-    }
-    doLight();
+  if(states[WARNING] == WARNING_WATERING_DONE) {
+    relayOff(P2_WATERING);
+    last_watering = seconds();
+    start_watering = 0;
     return;
   }
-
-  // sunrise or sunset time
-  if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
-    //doWatering();
+  // emergency off after 90 sec
+  if(start_watering+90 < seconds()) {
+    relayOff(P2_WATERING);
+    states[WARNING] = WARNING_SUBSTRATE_LOW;
+    last_watering = seconds();
+    start_watering = 0;
+    return;
   }
-  if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
-    //doMisting();
+  // 15 sec pause after 30 sec working
+  if(start_watering+30 < seconds() &&
+      start_watering+30+15 > seconds()) {
+    relayOff(P2_WATERING);
+    return;
   }
-  doLight();
+  relayOn(P2_WATERING);
 }
 
 void lcdBacklightBlink(uint8_t _count) {
@@ -851,27 +912,27 @@ void lcdWarning() {
       fprintf_P(&lcd_out, PSTR("cold! :(        "));
       lcdTextBlink(1, 6, 7);
       return;
-    case WARNING_EEPROM:
+    case ERROR_EEPROM:
       fprintf_P(&lcd_out, PSTR("EEPROM ERROR!   ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Settings reset! "));
       lcdTextBlink(1, 0, 14);
       return;
-    case WARNING_DHT11:
+    case ERROR_DHT11:
       fprintf_P(&lcd_out, PSTR("DHT11 ERROR!    ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Check connection"));
       lcdTextBlink(1, 0, 15);
       return;
-    case WARNING_DS18B20:
+    case ERROR_DS18B20:
       fprintf_P(&lcd_out, PSTR("DS18B20 ERROR!  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Check connection"));
       lcdTextBlink(1, 0, 15);
       return;
-    case WARNING_BH1750:
+    case ERROR_BH1750:
       fprintf_P(&lcd_out, PSTR("BH1750 ERROR!   ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Check connection"));
       lcdTextBlink(1, 0, 15);
       return;
-    case WARNING_LOW_MEMORY:
+    case ERROR_LOW_MEMORY:
       fprintf_P(&lcd_out, PSTR("MEMORY ERROR!   ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Too low memory!"));
       lcdTextBlink(1, 0, 15);
