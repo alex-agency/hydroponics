@@ -13,7 +13,9 @@
 #include "OneWire.h"
 #include "DallasTemperature.h"
 #include "BH1750.h"
+#include "melody.h"
 
+// debug console
 #define DEBUG
 //#define DEBUG_LCD
 
@@ -67,6 +69,9 @@ SimpleMap<const char*, int, 14, comparator> states;
 // Declare push buttons
 OneButton rightButton(A2, true);
 OneButton leftButton(A3, true);
+
+// Set up Speaker digital pin
+Melody melody(8);
 
 // Declare variables
 EEPROM storage;
@@ -179,7 +184,7 @@ void setup()
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
-  delay(500);
+  delay(1000);
   // restart if memory lower 512 bytes
   softResetMem(512);
   // restart after freezing
@@ -195,6 +200,9 @@ void setup()
   leftButton.attachClick( leftButtonClick );
   leftButton.attachDoubleClick( leftButtonClick );
   leftButton.attachLongPressStart( buttonsLongPress );
+
+  // "R2D2" melody
+  melody.play(2); 
 }
 
 //
@@ -223,6 +231,8 @@ void loop()
       lcdEditMenu(menuItem, menuEditCursor);
     else
       lcdShowMenu(menuItem);
+      
+    melody.beep(1);
   }
 
   if(slow_timer) {
@@ -246,8 +256,8 @@ void loop()
   // update push buttons
   leftButton.tick();
   rightButton.tick();
-  // not so fast
-  delay(50);
+  // update melody
+  melody.update();
 }
 
 /****************************************************************************/
@@ -454,8 +464,8 @@ void read_check() {
   states[ERROR] = NO_ERROR;
   // check water tank
   if(states[S4_MISTING] == false) {
-    states[WARNING] = WARNING_NO_WATER;
-    return;
+    //states[WARNING] = WARNING_NO_WATER;
+    //return;
   }
   // no warnings
   states[WARNING] = NO_WARNING;
@@ -869,7 +879,7 @@ void lcdWarning() {
   lcd.home();
   switch (states[WARNING]) {
     case WARNING_NO_WATER:
-      fprintf_P(&lcd_out, PSTR("Can’t misting!  ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Misting error!  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("No water! :(    "));
       lcdTextBlink(1, 0, 12);
       return;
@@ -883,7 +893,7 @@ void lcdWarning() {
       lcdTextBlink(1, 0, 15);
       return;
     case WARNING_NO_SUBSTRATE:
-      fprintf_P(&lcd_out, PSTR("Can't watering! ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Watering error! ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Plants can die! "));
       lcdTextBlink(1, 0, 14);
       return;
@@ -946,6 +956,8 @@ void leftButtonClick() {
       menuItem, menuEditCursor);
   #endif
   last_touch = seconds();
+  // beep
+  melody.beep(1);
   // enable backlight
   if(lcdBacklight == false) {
     lcdBacklightToggle();
@@ -1041,6 +1053,8 @@ void rightButtonClick() {
       menuItem, menuEditCursor);
   #endif
   last_touch = seconds();
+  // beep
+  melody.beep(1);
   // enable backlight
   if(lcdBacklight == false) {
     lcdBacklightToggle();
