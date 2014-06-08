@@ -1,55 +1,61 @@
-
 #ifndef MELODY_H
 #define MELODY_H
 
 #include "pitches.h"
-#include <avr/pgmspace.h>
+//#include <avr/pgmspace.h>
 
-#define DEBUG
+//#define DEBUG
 
-// declare melody count
-#define numMelodies  2
+// Avoid spurious warnings
+#if ! defined( NATIVE ) && defined( ARDUINO )
+#undef PROGMEM
+#define PROGMEM __attribute__(( section(".progmem.data") ))
+#undef PSTR
+#define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
+#endif
+
+// short beep
+#define BEEP  0
+const uint16_t beep1[]         = { N_A5, N_E5, N_REST };
+const uint8_t beep1_beats[]    = { 2, 	 2,    4 };
+const uint8_t beep1_tempo      = 30;
+// "R2D2" melody
+#define R2D2  1
+const uint16_t r2d2[]          = { N_A6, N_G6, N_E6, N_C6, N_D6, N_B6, N_F6, N_C7,
+                                   N_A6, N_G6, N_E6, N_C6, N_D6, N_B6, N_F6, N_C7 };
+const uint8_t r2d2_beats[]     = { 2,    2,    2,    2,    2,    2,    2,    2,
+                                   2,    2,    2,    2,    2,    2,    2,    2 };
+const uint8_t r2d2_tempo       = 40;
+
 
 class Melody
 {
 public:
   Melody( uint8_t _pin ) {
     pin = _pin;
-  };
+  }
 
   void beep( uint8_t _beepCount ) {
-    if( _beepCount < 0 )
-	  return;
-	// set beep count
-	beepCount = _beepCount-1;
-	// play beep first time
-	play(1);
-  };
+	beepCount = _beepCount;
+  }
 
   void play( uint8_t _melodyNum ) {
-  	// initialize speaker pin
     pinMode(pin, OUTPUT);
     // prevent new play if previous not ended
     if( noteIndex < numNotes ) 
 	  return;
-	// check number
-	if(_melodyNum < 0 || _melodyNum == 0 || _melodyNum > numMelodies)
-      melodyNum = random(2, numMelodies);
-	else
-	  melodyNum = _melodyNum;
 	// compile chosen melody
-	compileMelody();
+	compileMelody(_melodyNum);
 	// reset index
 	noteIndex = 0;
 	notePause = 0;
 	time = 0;
-  };
+  }
 
   void update( void ) {
 	// beep cycle
 	if( beepCount > 0 && noteIndex >= numNotes ) {
-	  // play beep melody
-	  play(1);
+	  play(0);
 	  beepCount--;
 	}
 	// skip if it last note or pause between notes
@@ -59,13 +65,12 @@ public:
 	playNote();
 	// change note cursor
 	noteIndex++;
-	time = millis();	
-  };
+	time = millis();
+  }
 
 private:
   uint8_t pin;
   uint8_t beepCount;
-  uint8_t melodyNum;
   const uint16_t *notes;
   const uint8_t *beats;
   uint8_t tempo;	
@@ -74,47 +79,45 @@ private:
   uint16_t notePause;
   uint32_t time;
 
-  void compileMelody( void ) {
-	// short beep 
-	if( melodyNum == 1 ) {
-	  const uint16_t beep1[] 			= { N_A5, N_E5, N_REST };
-	  notes 							= beep1;
-	  const uint8_t beep1_beats[] 		= { 2, 	  4,    12 };
-	  beats 							= beep1_beats;
-	  tempo 							= 60;
-	  numNotes 							= sizeof(beep1)/sizeof(uint16_t);
-	}
-	// "R2D2" melody
-    else if( melodyNum == 2 ) {
-	  const uint16_t r2d2[] 			= { N_A6, N_G6, N_E6, N_C6, N_D6, N_B6, N_F6, N_C7,
-                     						N_A6, N_G6, N_E6, N_C6, N_D6, N_B6, N_F6, N_C7 };
-	  notes 							= r2d2;
-	  const uint8_t r2d2_beats[] 		= { 2,    2,    2,    2,    2,    2,    2,    2,
-                               				2,    2,    2,    2,    2,    2,    2,    2 };
-	  beats 							= r2d2_beats;
-	  tempo 							= 40;
-	  numNotes 							= sizeof(r2d2)/sizeof(uint16_t);
-	}
-  };
+  void compileMelody( uint8_t _melodyNum ) {
+    switch(_melodyNum) {
+      case BEEP:
+      	notes = beep1;
+        beats = beep1_beats;
+        tempo = beep1_tempo;
+        numNotes = sizeof(beep1)/sizeof(uint16_t);
+      	break;
+      case R2D2:
+      	notes = r2d2;
+      	beats = r2d2_beats;
+      	tempo = r2d2_tempo;
+        numNotes = sizeof(r2d2)/sizeof(uint16_t);
+        break;
+    }
+    #ifdef DEBUG
+      printf_P(PSTR("MELODY: Info: Melody: #%d, Notes count: #%d.\n\r"), 
+        _melodyNum, numNotes);
+    #endif
+  }
 
   void playNote( void ) {
-	noTone(pin);
+    noTone(pin);
 		
-	int freq = notes[noteIndex] * 2;
-	int duration = tempo * beats[noteIndex];
+    int freq = notes[noteIndex] * 2;
+    int duration = tempo * beats[noteIndex];
+	
+    #ifdef DEBUG
+      printf_P(PSTR("MELODY: Info: Note #%d, freq: %d*2, duration: %d*%d.\n\r"),
+      noteIndex, notes[noteIndex], beats[noteIndex], tempo);
+    #endif
 
-	#ifdef DEBUG
-	  printf_P(PSTR("MELODY: Info: Note #%u, freq: %u*2, duration: %u*%u.\n\r"),
-        noteIndex, notes[noteIndex], beats[noteIndex], tempo);
-	#endif
-
-	if (freq > 0) {
-	  tone(pin, freq, duration); 
-	}
-	// to distinguish the notes, set a minimum time between them.
-	// the note's duration + 30% seems to work well:
-	notePause = duration + (duration * 0.30);
-  };
+    if (freq > 0) {
+      tone(pin, freq, duration); 
+    }
+    // to distinguish the notes, set a minimum time between them.
+    // the note's duration + 30% seems to work well:
+    notePause = duration + (duration * 0.30);
+  }
 };
 
 #endif // __MELODY_H__

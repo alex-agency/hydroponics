@@ -6,6 +6,14 @@
 
 //#define DEBUG
 
+// Avoid spurious warnings
+#if ! defined( NATIVE ) && defined( ARDUINO )
+#undef PROGMEM
+#define PROGMEM __attribute__(( section(".progmem.data") ))
+#undef PSTR
+#define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
+#endif
+
 #define EEPROM_SIZE  256 
 //#define EEPROM_OFFSET
 

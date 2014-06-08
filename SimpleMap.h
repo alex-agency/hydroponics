@@ -4,6 +4,14 @@
 
 #include <string.h>
 
+// Avoid spurious warnings
+#if ! defined( NATIVE ) && defined( ARDUINO )
+#undef PROGMEM
+#define PROGMEM __attribute__(( section(".progmem.data") ))
+#undef PSTR
+#define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
+#endif
+
 template<typename K>
 struct defcmp
 {
@@ -116,11 +124,11 @@ class SimpleMap
       strcpy(buffer, "{");
       for(uint8_t i=0; i<currentIndex; i++) {
         if (i > 0) {
-          strcat(buffer, ", ");
+          strcat(buffer, PSTR(", "));
         }
         snprintf_P(buffer,sizeof(buffer),PSTR("%s?=%d"),buffer, values[i]);
       }
-      strcat(buffer, "}");
+      strcat(buffer, PSTR("}"));
       return buffer; 
     }
 

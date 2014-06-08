@@ -9,30 +9,31 @@
 #include "Settings.h"
 #include "OneButton.h"
 #include "DS1307new.h"
-#include "dht11.h"
+#include "DHT11.h"
 #include "OneWire.h"
 #include "DallasTemperature.h"
 #include "BH1750.h"
-#include "melody.h"
+#include "Melody.h"
 
 // debug console
 #define DEBUG
 //#define DEBUG_LCD
+//#define DEBUG_RTC
 
 // Declare LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // Declare custom LCD characters
-byte celcium_char[8] = {24, 24, 3, 4, 4, 4, 3, 0};
+uint8_t celcium_char[8] = {24, 24, 3, 4, 4, 4, 3, 0};
 const uint8_t celcium_c = 0;
-byte heart_char[8] = {0, 10, 21, 17, 10, 4, 0, 0};
+uint8_t heart_char[8] = {0, 10, 21, 17, 10, 4, 0, 0};
 const uint8_t heart_c = 1;
-byte humidity_char[8] = {4, 10, 10, 17, 17, 17, 14, 0};
+uint8_t humidity_char[8] = {4, 10, 10, 17, 17, 17, 14, 0};
 const uint8_t humidity_c = 2;
-byte temp_char[8] = {4, 10, 10, 14, 31, 31, 14, 0};
+uint8_t temp_char[8] = {4, 10, 10, 14, 31, 31, 14, 0};
 const uint8_t temp_c = 3;
-byte flower_char[8] = {14, 27, 21, 14, 4, 12, 4, 0};
+uint8_t flower_char[8] = {14, 27, 21, 14, 4, 12, 4, 0};
 const uint8_t flower_c = 4;
-byte lamp_char[8] = {14, 17, 17, 17, 14, 14, 4, 0};
+uint8_t lamp_char[8] = {14, 17, 17, 17, 14, 14, 4, 0};
 const uint8_t lamp_c = 5;
 
 // Declare output functions
@@ -89,6 +90,7 @@ uint8_t menuItem;
 uint8_t menuHomeItem;
 bool lcdBlink;
 bool lcdBacklight = true;
+bool substrate_tank;
 
 // Declare constants
 #define CDN  "cdn" // days after 2000-01-01
@@ -109,15 +111,14 @@ bool lcdBacklight = true;
 
 // Declare warning states
 #define NO_WARNING  0
-#define WARNING_NO_WATER  1
-#define WARNING_SUBSTRATE_FULL  2
-#define WARNING_SUBSTRATE_LOW  3
-#define WARNING_NO_SUBSTRATE  4
-#define WARNING_WATERING_DONE  5
-#define WARNING_WATERING  6
-#define WARNING_MISTING  7
-#define WARNING_AIR_COLD  8
-#define WARNING_SUBSTRATE_COLD  9
+#define WARNING_SUBSTRATE_FULL  1
+#define WARNING_SUBSTRATE_LOW  2
+#define WARNING_WATERING_DONE  3
+#define WARNING_WATERING  4
+#define WARNING_MISTING  5
+#define WARNING_AIR_COLD  6
+#define WARNING_SUBSTRATE_COLD  7
+#define WARNING_NO_WATER  8
 
 // Declare error states
 #define NO_ERROR  0
@@ -126,6 +127,7 @@ bool lcdBacklight = true;
 #define ERROR_DHT11  13
 #define ERROR_DS18B20  14
 #define ERROR_BH1750  15
+#define ERROR_NO_SUBSTRATE  16
 
 // Declare LCD menu items
 #define HOME  0
@@ -202,7 +204,7 @@ void setup()
   leftButton.attachLongPressStart( buttonsLongPress );
 
   // "R2D2" melody
-  melody.play(2); 
+  melody.play(R2D2); 
 }
 
 //
@@ -215,14 +217,19 @@ void loop()
 
   if(fast_timer) {
     // check level sensors
-    read_levels();
+    checkLevels();
+    // check for overloading substrate
+    if(substrate_tank = false && states[S1_SUBSTRATE])
+      states[WARNING] = WARNING_SUBSTRATE_FULL;
+    // prevent redundant update
     if(menuEditMode == false) {
       // update clock
       read_RTC();
     }
     // manage LCD
-    if( states[WARNING] != NO_WARNING ||
-        states[ERROR] != NO_ERROR )
+    if( states[ERROR] != NO_ERROR )
+      lcdAlert();
+    else if( states[WARNING] != NO_WARNING )
       lcdWarning();
     else if( menuItem != HOME 
         && last_touch+60 < seconds() )
@@ -231,15 +238,13 @@ void loop()
       lcdEditMenu(menuItem, menuEditCursor);
     else
       lcdShowMenu(menuItem);
-      
-    melody.beep(1);
   }
 
   if(slow_timer) {
-    // read values and check errors
-    read_check();
-    // main program
-    doWork();
+    // error checking
+    doCheck();
+    // main actions
+    doAction();
     // save settings
     if( storage.changed && storage_ok ) {
       // WARNING: EEPROM can burn!
@@ -360,7 +365,7 @@ bool read_BH1750() {
   return true;
 }
 
-void read_levels() {
+void checkLevels() {
   pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
   if(digitalRead(S1_SUBSTRATEPIN) == 1) {
     states[S1_SUBSTRATE] = true;
@@ -430,7 +435,7 @@ bool relays(const char* relay, uint8_t state) {
   return false;
 }
 
-void read_check() {
+void doCheck() {
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
@@ -464,10 +469,17 @@ void read_check() {
   states[ERROR] = NO_ERROR;
   // check water tank
   if(states[S4_MISTING] == false) {
-    //states[WARNING] = WARNING_NO_WATER;
-    //return;
+    states[WARNING] = WARNING_NO_WATER;
+    return;
   }
-  // no warnings
+  // when substrate reach flowers
+  if(states[S2_WATERING] == false) {
+    states[WARNING] = WARNING_WATERING_DONE;
+    return;
+  }
+  // save substrate state
+  substrate_tank = states[S1_SUBSTRATE];
+  // no warning
   states[WARNING] = NO_WARNING;
 }
 
@@ -475,8 +487,8 @@ uint16_t seconds() {
   return millis()/1000;
 }
 
-void doWork() {
-  // don't do any work
+void doAction() {
+  // don't do any action while error
   if(states[ERROR] != NO_ERROR) {
     return;
   }
@@ -512,7 +524,7 @@ void doWork() {
 }
 
 void doLight() {
-  // light enough 
+  // light enough
   if(states[LIGHT] > settings.lightThreshold) {
     // turn off lamp
     relayOff(LAMP);
@@ -557,13 +569,16 @@ void doLight() {
 }
 
 void doMisting() {
-  if(states[WARNING] != NO_WARNING)
+  if(states[WARNING] != WARNING_NO_WATER)
     return;
   states[WARNING] = WARNING_MISTING;
   // start misting
   if(start_misting == 0) {
     relayOn(P1_MISTING);
     start_misting = seconds();
+    #ifdef DEBUG
+      printf_P(PSTR("Misting: Info: Start misting.\n\r"));
+    #endif
     return;
   }
   // off after 10 sec
@@ -571,24 +586,33 @@ void doMisting() {
     relayOff(P1_MISTING);
     last_misting = seconds();
     start_misting = 0;
+    #ifdef DEBUG
+      printf_P(PSTR("Misting: Info: Stop misting.\n\r"));
+    #endif
     return;
   }
 }
 
 void doWatering() {
-  if(states[WARNING] != NO_WARNING)
+  if(states[WARNING] != WARNING_SUBSTRATE_COLD)
     return;
   states[WARNING] = WARNING_WATERING;
   // start watering
   if(start_watering == 0) {
     relayOn(P2_WATERING);
     start_watering = seconds();
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Info: Start watering.\n\r"));
+    #endif
     return;
   }
   if(states[WARNING] == WARNING_WATERING_DONE) {
     relayOff(P2_WATERING);
     last_watering = seconds();
     start_watering = 0;
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
+    #endif
     return;
   }
   // emergency off after 90 sec
@@ -597,15 +621,22 @@ void doWatering() {
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     last_watering = seconds();
     start_watering = 0;
+    printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
     return;
   }
   // 15 sec pause after 30 sec working
   if(start_watering+30 < seconds() &&
       start_watering+30+15 > seconds()) {
     relayOff(P2_WATERING);
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Info: Pause 15 sec.\n\r"));
+    #endif
     return;
   }
   relayOn(P2_WATERING);
+  #ifdef DEBUG
+    printf_P(PSTR("Watering: Info: Resume watering.\n\r"));
+  #endif
 }
 
 void lcdBacklightBlink(uint8_t _count) {
@@ -873,29 +904,18 @@ void lcdWarning() {
     printf_P(PSTR("LCD Panel: Info: Show Warning #%d.\n\r"),
       states[WARNING]);
   #endif
-  // backlight blink
-  lcdBacklightBlink(1);
   
   lcd.home();
   switch (states[WARNING]) {
-    case WARNING_NO_WATER:
-      fprintf_P(&lcd_out, PSTR("Misting error!  ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("No water! :(    "));
-      lcdTextBlink(1, 0, 12);
-      return;
     case WARNING_SUBSTRATE_FULL:
       fprintf_P(&lcd_out, PSTR("Substrate tank  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("is full! :)))   "));
+      melody.beep(3);
       return;
     case WARNING_SUBSTRATE_LOW:
       fprintf_P(&lcd_out, PSTR("Low substrate!  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Please add water"));
       lcdTextBlink(1, 0, 15);
-      return;
-    case WARNING_NO_SUBSTRATE:
-      fprintf_P(&lcd_out, PSTR("Watering error! ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("Plants can die! "));
-      lcdTextBlink(1, 0, 14);
       return;
     case WARNING_WATERING_DONE:
       fprintf_P(&lcd_out, PSTR("Watering done! :)")); lcd.setCursor(0,1);
@@ -921,6 +941,31 @@ void lcdWarning() {
       fprintf_P(&lcd_out, PSTR("Substrate is too")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("cold! :(        "));
       lcdTextBlink(1, 6, 7);
+      return;
+    case WARNING_NO_WATER:
+      fprintf_P(&lcd_out, PSTR("Misting error!  ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("No water! :(    "));
+      lcdTextBlink(1, 0, 12);
+      return;
+  }  
+}
+
+void lcdAlert() {
+  #ifdef DEBUG_LCD
+    printf_P(PSTR("LCD Panel: Info: Show Alert #%d.\n\r"),
+      states[ERROR]);
+  #endif
+  // backlight blink
+  lcdBacklightBlink(1);
+  // beeping
+  melody.beep(5);
+
+  lcd.home();
+  switch (states[ERROR]) {
+    case ERROR_NO_SUBSTRATE:
+      fprintf_P(&lcd_out, PSTR("Watering error! ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Plants can die! "));
+      lcdTextBlink(1, 0, 14);
       return;
     case ERROR_EEPROM:
       fprintf_P(&lcd_out, PSTR("EEPROM ERROR!   ")); lcd.setCursor(0,1);
@@ -955,9 +1000,8 @@ void leftButtonClick() {
     printf_P(PSTR("LCD Panel: Info: Left button click: Menu #%d, Cursor #%d.\n\r"),
       menuItem, menuEditCursor);
   #endif
-  last_touch = seconds();
-  // beep
   melody.beep(1);
+  last_touch = seconds();
   // enable backlight
   if(lcdBacklight == false) {
     lcdBacklightToggle();
@@ -1052,9 +1096,8 @@ void rightButtonClick() {
     printf_P(PSTR("LCD Panel: Info: Right button click: Menu #%d, Cursor #%d.\n\r"),
       menuItem, menuEditCursor);
   #endif
-  last_touch = seconds();
-  // beep
   melody.beep(1);
+  last_touch = seconds();
   // enable backlight
   if(lcdBacklight == false) {
     lcdBacklightToggle();
@@ -1152,6 +1195,7 @@ void buttonsLongPress() {
     printf_P(PSTR("LCD Panel: Info: Button long press: Menu #%d.\n\r"),
       menuItem);
   #endif
+  melody.beep(2);
   // action for simple Menu
   if(menuEditMode == false) {
     // enter to Edit Menu and return edit field
