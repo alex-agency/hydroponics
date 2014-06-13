@@ -373,7 +373,7 @@ void checkLevels() {
     states[S1_SUBSTRATE] = false;
   }
   pinMode(S2_WATERINGPIN, INPUT_PULLUP);
-  if(digitalRead(S2_WATERINGPIN) == 1) {
+  if(digitalRead(S2_WATERINGPIN) == 0) {
     states[S2_WATERING] = true;
   } else {
     states[S2_WATERING] = false;
@@ -465,21 +465,27 @@ void doCheck() {
     states[ERROR] = ERROR_BH1750;
     return;
   }
-  // no errors
+  // reset error
   states[ERROR] = NO_ERROR;
-  // check water tank
+
+  // check water for misting
   if(states[S4_MISTING] == false) {
     states[WARNING] = WARNING_NO_WATER;
     return;
   }
-  // when substrate reach flowers
-  if(states[S2_WATERING] == false) {
+  // check substrate temperature
+  if(states[T_SUBSTRATE] <= 20) {
+    //states[WARNING] = WARNING_SUBSTRATE_COLD;
+    //return;
+  }
+  // if substrate reached flowers
+  if(states[S2_WATERING]) {
     states[WARNING] = WARNING_WATERING_DONE;
     return;
   }
   // save substrate state
   substrate_tank = states[S1_SUBSTRATE];
-  // no warning
+  // reset warning
   states[WARNING] = NO_WARNING;
 }
 
@@ -496,6 +502,9 @@ void doAction() {
   doLight();
   // day time
   if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
+    #ifdef DEBUG
+      printf_P(PSTR("Action: Info: Day time.\n\r"));
+    #endif
     if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
       doWatering();
     }
@@ -506,6 +515,9 @@ void doAction() {
   }
   // night time 
   if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
+    #ifdef DEBUG
+      printf_P(PSTR("Action: Info: Night time.\n\r"));
+    #endif
     if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
       doWatering();
     }
@@ -514,6 +526,9 @@ void doAction() {
     }
     return;
   }
+  #ifdef DEBUG
+    printf_P(PSTR("Action: Info: Between day and night time.\n\r"));
+  #endif
   // sunrise or sunset time
   if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
     doWatering();
