@@ -180,9 +180,7 @@ void setup()
   lcd.createChar(flower_c, flower_char);
   lcd.createChar(lamp_c, lamp_char);
   lcd.clear();
-
-  // show free memory
-  fprintf(&lcd_out, "%d bytes free", freeMemory());
+  
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
@@ -380,7 +378,7 @@ void checkLevels() {
   }
   // no pull-up for A6 and A7
   pinMode(S4_MISTINGPIN, INPUT);
-  if(analogRead(S4_MISTINGPIN) < 150) {
+  if(analogRead(S4_MISTINGPIN) > 300) {
     states[S4_MISTING] = true;
   } else {
     states[S4_MISTING] = false;
@@ -474,7 +472,7 @@ void doCheck() {
     return;
   }
   // check substrate temperature
-  if(states[T_SUBSTRATE] <= 20) {
+  if(states[T_SUBSTRATE] <= settings.tempSubsThreshold) {
     //states[WARNING] = WARNING_SUBSTRATE_COLD;
     //return;
   }
@@ -503,12 +501,13 @@ void doAction() {
   // day time
   if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
     #ifdef DEBUG
-      printf_P(PSTR("Action: Info: Day time.\n\r"));
+      printf_P(PSTR("Action: Info: Day time. Now: %d sec.\n\r"), seconds());
     #endif
     if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
       doWatering();
     }
-    if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
+    if((seconds() > last_misting + (settings.mistingDayPeriod*60)) ||
+        states[HUMIDITY] <= settings.humidThreshold) {
       doMisting();
     }
     return;
@@ -516,24 +515,29 @@ void doAction() {
   // night time 
   if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
     #ifdef DEBUG
-      printf_P(PSTR("Action: Info: Night time.\n\r"));
+      printf_P(PSTR("Action: Info: Night time. Now: $d sec.\n\r"), seconds());
     #endif
     if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
       doWatering();
     }
-    if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
+    if((seconds() > last_misting + (settings.mistingNightPeriod*60)) ||
+        states[HUMIDITY] <= settings.humidThreshold) {
       doMisting();
     }
     return;
   }
   #ifdef DEBUG
-    printf_P(PSTR("Action: Info: Between day and night time.\n\r"));
+    printf_P(PSTR("Action: Info: Between day and night time. Now: %d sec.\n\r"), 
+      seconds());
+    printf_P(PSTR("Action: Info: %d > %d.\n\r"), 
+      seconds(), last_misting + (settings.mistingSunrisePeriod*60));
   #endif
   // sunrise or sunset time
   if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
     doWatering();
   }
-  if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
+  if((seconds() > last_misting + (settings.mistingSunrisePeriod*60)) ||
+      states[HUMIDITY] <= settings.humidThreshold) {
     doMisting();
   }
 }

@@ -18,7 +18,7 @@
 //#define EEPROM_OFFSET
 
 // Declare EEPROM values
-#define SETTINGS_ID ":)"
+#define SETTINGS_ID "s3"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
@@ -29,10 +29,10 @@ struct SettingsStruct {
   uint8_t humidThreshold, tempThreshold, tempSubsThreshold;
   char id[3];
 } settings = {
-  60, 180, 90,
-  30, 90, 60,
-  13, 16,
-  21, 04,
+  15, 15, 15,//45, 90, 60,
+  5, 5, 5,//60, 90, 30,
+  11, 15,
+  21, 05,
   200, 14,
   40, 20, 20,
   SETTINGS_ID
@@ -64,7 +64,7 @@ class EEPROM
       } 
       printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
       // initial default settings to EEPROM
-      //address_offset = 0; changed = true; save();
+      address_offset = 0; changed = true; save();
       return false;
     }
 
