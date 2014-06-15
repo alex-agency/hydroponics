@@ -91,6 +91,7 @@ uint8_t menuHomeItem;
 bool lcdBlink;
 bool lcdBacklight = true;
 bool substrate_tank;
+bool first_start = true;
 
 // Declare constants
 #define CDN  "cdn" // days after 2000-01-01
@@ -144,7 +145,8 @@ bool substrate_tank;
 #define HUMIDITY_THRESHOLD  11
 #define T_AIR_THRESHOLD  12
 #define T_SUBSTRATE_THRESHOLD  13
-#define CLOCK  14
+#define TEST 14
+#define CLOCK  15
 
 // Declare pins
 #define DHT11PIN  3
@@ -184,7 +186,8 @@ void setup()
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
-  delay(1000);
+  // prevent continiously restart
+  delay(500);
   // restart if memory lower 512 bytes
   softResetMem(512);
   // restart after freezing
@@ -195,10 +198,10 @@ void setup()
 
   // Configure buttons
   rightButton.attachClick( rightButtonClick );
-  rightButton.attachDoubleClick( rightButtonClick );
+  rightButton.attachDoubleClick( rightButtonDoubleClick );
   rightButton.attachLongPressStart( buttonsLongPress );
   leftButton.attachClick( leftButtonClick );
-  leftButton.attachDoubleClick( leftButtonClick );
+  leftButton.attachDoubleClick( leftButtonDoubleClick );
   leftButton.attachLongPressStart( buttonsLongPress );
 
   // "R2D2" melody
@@ -215,7 +218,7 @@ void loop()
 
   if(fast_timer) {
     // check level sensors
-    checkLevels();
+    read_levels();
     // check for overloading substrate
     if(substrate_tank = false && states[S1_SUBSTRATE])
       states[WARNING] = WARNING_SUBSTRATE_FULL;
@@ -238,7 +241,7 @@ void loop()
       lcdShowMenu(menuItem);
   }
 
-  if(slow_timer) {
+  if(slow_timer || first_start) {
     // error checking
     doCheck();
     // main actions
@@ -254,6 +257,7 @@ void loop()
       // switch off backlight
       lcdBacklightToggle();
     }
+    first_start = false;
   }
   
   // update push buttons
@@ -363,7 +367,7 @@ bool read_BH1750() {
   return true;
 }
 
-void checkLevels() {
+void read_levels() {
   pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
   if(digitalRead(S1_SUBSTRATEPIN) == 1) {
     states[S1_SUBSTRATE] = true;
@@ -481,6 +485,11 @@ void doCheck() {
     states[WARNING] = WARNING_WATERING_DONE;
     return;
   }
+  // check air temperature
+  if(states[T_AIR] <= settings.tempThreshold) {
+    states[WARNING] = WARNING_AIR_COLD;
+    return;
+  }
   // save substrate state
   substrate_tank = states[S1_SUBSTRATE];
   // reset warning
@@ -491,6 +500,20 @@ uint16_t seconds() {
   return millis()/1000;
 }
 
+void doTest() {
+  doCheck();
+  test = settings;
+  settings.lightThreshold = 3000;
+  settings.mistingDayPeriod = 0;
+  settings.mistingNightPeriod = 0;
+  settings.mistingSunrisePeriod = 0;
+  settings.wateringDayPeriod = 0;
+  settings.wateringNightPeriod = 0;
+  settings.wateringSunrisePeriod = 0;
+  doAction();
+  return;
+}
+
 void doAction() {
   // don't do any action while error
   if(states[ERROR] != NO_ERROR) {
@@ -498,6 +521,11 @@ void doAction() {
   }
   // manage light
   doLight();
+  // check humidity
+  if(states[HUMIDITY] <= settings.humidThreshold) {
+    doMisting();
+    return;
+  }
   // day time
   if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
     #ifdef DEBUG
@@ -506,8 +534,7 @@ void doAction() {
     if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
       doWatering();
     }
-    if((seconds() > last_misting + (settings.mistingDayPeriod*60)) ||
-        states[HUMIDITY] <= settings.humidThreshold) {
+    if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
       doMisting();
     }
     return;
@@ -520,8 +547,7 @@ void doAction() {
     if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
       doWatering();
     }
-    if((seconds() > last_misting + (settings.mistingNightPeriod*60)) ||
-        states[HUMIDITY] <= settings.humidThreshold) {
+    if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
       doMisting();
     }
     return;
@@ -536,8 +562,7 @@ void doAction() {
   if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
     doWatering();
   }
-  if((seconds() > last_misting + (settings.mistingSunrisePeriod*60)) ||
-      states[HUMIDITY] <= settings.humidThreshold) {
+  if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
     doMisting();
   }
 }
@@ -752,6 +777,11 @@ void lcdShowMenu(uint8_t _menuItem) {
       fprintf_P(&lcd_out, PSTR("less than %2d%c   "), 
         settings.tempSubsThreshold, celcium_c);
       return;
+    case TEST:
+      fprintf_P(&lcd_out, PSTR("Test all system.")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("          Start?"));
+      lcdTextBlink(0, 9, 15);
+      return;
     case CLOCK:
       fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d"), 
         RTC.hour, RTC.minute, RTC.second); lcd.setCursor(0,1);
@@ -874,7 +904,11 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       fprintf_P(&lcd_out, PSTR("less than %2d%c   "), 
         settings.tempSubsThreshold, celcium_c);
       lcdTextBlink(1, 10, 11);
-      return 0; 
+      return 0;
+    case TEST:
+      doTest();
+      menuItem = HOME;
+      return 0;
     case CLOCK:
       fprintf_P(&lcd_out, PSTR("Setting time    ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("%02d:%02d %02d-%02d-%4d"), 
@@ -923,6 +957,10 @@ void lcdWarning() {
     printf_P(PSTR("LCD Panel: Info: Show Warning #%d.\n\r"),
       states[WARNING]);
   #endif
+  // enable backlight
+  if(lcdBacklight == false) {
+    lcdBacklightToggle();
+  }
   
   lcd.home();
   switch (states[WARNING]) {
@@ -1014,6 +1052,11 @@ void lcdAlert() {
   }  
 }
 
+void leftButtonDoubleClick() {
+  leftButtonClick();
+  leftButtonClick();  
+}
+
 void leftButtonClick() {
   #ifdef DEBUG_LCD  
     printf_P(PSTR("LCD Panel: Info: Left button click: Menu #%d, Cursor #%d.\n\r"),
@@ -1025,6 +1068,10 @@ void leftButtonClick() {
   if(lcdBacklight == false) {
     lcdBacklightToggle();
     return; 
+  }
+  // disable test mode
+  if(settings.lightThreshold == 3000) {
+    settings = test;
   }
   // reset home screen
   if(menuHomeItem > 0) menuHomeItem = 0;
@@ -1110,6 +1157,11 @@ void leftButtonClick() {
   }
 }
 
+void rightButtonDoubleClick() {
+  rightButtonClick();
+  rightButtonClick();
+}
+
 void rightButtonClick() {
   #ifdef DEBUG_LCD 
     printf_P(PSTR("LCD Panel: Info: Right button click: Menu #%d, Cursor #%d.\n\r"),
@@ -1121,6 +1173,10 @@ void rightButtonClick() {
   if(lcdBacklight == false) {
     lcdBacklightToggle();
     return; 
+  }
+  // disable test mode
+  if(settings.lightThreshold == 3000) {
+    settings = test;
   }
   // reset home screen
   if(menuHomeItem > 0) menuHomeItem = 0;

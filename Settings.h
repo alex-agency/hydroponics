@@ -18,7 +18,7 @@
 //#define EEPROM_OFFSET
 
 // Declare EEPROM values
-#define SETTINGS_ID "s3"
+#define SETTINGS_ID "s4"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
@@ -29,14 +29,14 @@ struct SettingsStruct {
   uint8_t humidThreshold, tempThreshold, tempSubsThreshold;
   char id[3];
 } settings = {
-  15, 15, 15,//45, 90, 60,
-  5, 5, 5,//60, 90, 30,
+  45, 90, 60,
+  60, 90, 30,
   11, 15,
   21, 05,
   200, 14,
   40, 20, 20,
   SETTINGS_ID
-};
+}, test;
 
 
 class EEPROM 
@@ -77,20 +77,20 @@ class EEPROM
       if(address_offset > (EEPROM_SIZE-sizeof(settings))) 
         address_offset = 0;
       
-        uint8_t updateCount = 0;
-        if(changed) {
-          printf_P(PSTR("EEPROM: Warning: Write to EEPROM! Do this not so often!\n\r"));
-          updateCount = updateBlock(address_offset, settings);
-          changed = false;
-        } else {
-          return true;
-        }
+      uint8_t updateCount = 0;
+      if(changed) {
+        printf_P(PSTR("EEPROM: Warning: Write to EEPROM! Do this not so often!\n\r"));
+        updateCount = updateBlock(address_offset, settings);
+        changed = false;
+      } else {
+        return true;
+      }
 
-        if(updateCount == sizeof(settings)) {
-          #ifdef DEBUG
-            printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
-              address_offset);
-          #endif
+      if(updateCount == sizeof(settings)) {
+        #ifdef DEBUG
+          printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
+            address_offset);
+        #endif
         return true;
       }
       printf_P(PSTR("EEPROM: Error: Settings isn't saved at %d address!\n\r"), 
