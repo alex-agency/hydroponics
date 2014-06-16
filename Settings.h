@@ -18,7 +18,7 @@
 //#define EEPROM_OFFSET
 
 // Declare EEPROM values
-#define SETTINGS_ID "s4"
+#define SETTINGS_ID "s5"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
@@ -34,7 +34,7 @@ struct SettingsStruct {
   11, 15,
   21, 05,
   200, 14,
-  40, 20, 20,
+  50, 15, 15,
   SETTINGS_ID
 }, test;
 
