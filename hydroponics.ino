@@ -1,5 +1,5 @@
 // Import libraries
-#include <avr/pgmspace.h>
+//#include <avr/pgmspace.h>
 #include <Wire.h>
 #include "LiquidCrystal_I2C.h"
 #include "MemoryFree.h"
@@ -65,7 +65,7 @@ struct comparator {
     return strcmp(str1, str2) == 0;
   }
 };
-SimpleMap<const char*, int, 14, comparator> states;
+SimpleMap<const char*, int, 15, comparator> states;
 
 // Declare push buttons
 OneButton rightButton(A2, true);
@@ -112,9 +112,9 @@ bool first_start = true;
 
 // Declare warning states
 #define NO_WARNING  0
-#define WARNING_SUBSTRATE_FULL  1
+#define INFO_SUBSTRATE_FULL  1
 #define WARNING_SUBSTRATE_LOW  2
-#define WARNING_WATERING_DONE  3
+#define INFO_SUBSTRATE_DELIVERED  3
 #define WARNING_WATERING  4
 #define WARNING_AIR_COLD  5
 #define WARNING_SUBSTRATE_COLD  6
@@ -122,11 +122,11 @@ bool first_start = true;
 
 // Declare error states
 #define NO_ERROR  0
-#define ERROR_LOW_MEMORY  11
-#define ERROR_EEPROM  12
-#define ERROR_DHT11  13
-#define ERROR_BH1750  14
-#define ERROR_NO_SUBSTRATE  15
+#define ERROR_LOW_MEMORY  10
+#define ERROR_EEPROM  11
+#define ERROR_DHT11  12
+#define ERROR_BH1750  13
+#define ERROR_NO_SUBSTRATE  14
 
 // Declare LCD menu items
 #define HOME  0
@@ -188,7 +188,7 @@ void setup()
   delay(500);
   // restart if memory lower 512 bytes
   softResetMem(512);
-  // restart after freezing
+  // restart after freezing for 8 sec
   softResetTimeout();
 
   // Load settings
@@ -217,7 +217,7 @@ void loop()
     read_levels();
     // check for overloading substrate
     if(substrate_tank = false && states[S1_SUBSTRATE])
-      states[WARNING] = WARNING_SUBSTRATE_FULL;
+      states[WARNING] = INFO_SUBSTRATE_FULL;
     // prevent redundant update
     if(menuEditMode == false) {
       // update clock
@@ -450,18 +450,18 @@ void doCheck() {
   }
   // check and read DHT11 sensor
   if(read_DHT11() == false) {
-    states[ERROR] = ERROR_DHT11;
-    return;
+    //states[ERROR] = ERROR_DHT11;
+    //return;
   }
   // check and read BH1750 sensor
   if(read_BH1750() == false) {
-    states[ERROR] = ERROR_BH1750;
-    return;
+    //states[ERROR] = ERROR_BH1750;
+    //return;
   }
   // check and read DS18B20 sensor
   if(read_DS18B20() == false) {
-    //states[ERROR] = ERROR_NO_SUBSTRATE;
-    //return;
+    states[ERROR] = ERROR_NO_SUBSTRATE;
+    return;
   }
   // reset error
   states[ERROR] = NO_ERROR;
@@ -478,13 +478,13 @@ void doCheck() {
   }
   // if substrate reached flowers
   if(states[S2_WATERING]) {
-    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
-    return;
+    //states[WARNING] = INFO_SUBSTRATE_DELIVERED;
+    //return;
   }
   // check air temperature
   if(states[T_AIR] <= settings.tempThreshold) {
-    states[WARNING] = WARNING_AIR_COLD;
-    return;
+    //states[WARNING] = WARNING_AIR_COLD;
+    //return;
   }
   // save substrate state
   substrate_tank = states[S1_SUBSTRATE];
