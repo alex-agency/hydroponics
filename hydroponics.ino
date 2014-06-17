@@ -91,21 +91,17 @@ uint8_t menuHomeItem;
 bool lcdBlink;
 bool lcdBacklight = true;
 bool substrate_tank;
-bool first_start = true;
 
 // Declare constants
 #define CDN  "cdn" // days after 2000-01-01
 #define DTIME  "dtime" // minutes after 00:00
-#define HUMIDITY  "humidity"
-#define T_AIR  "t air"
-#define T_COMPUTER  "t computer"
-#define T_SUBSTRATE  "t substrate"
-#define LIGHT  "light"
-#define S1_SUBSTRATE  "s1 substrate"
-#define S2_WATERING  "s2 watering"
-#define S4_MISTING  "s4 misting"
-#define P1_MISTING  "p1 misting"
-#define P2_WATERING  "p2 watering"
+#define HUMIDITY  "humidity" // air humidity
+#define AIR_TEMP  "air temp"
+#define COMPUTER_TEMP  "comp. temp" // temperature inside
+#define SUBSTRATE_TEMP  "subs. temp"
+#define LIGHT  "light" // light intensivity
+#define PUMP_MISTING  "misting"
+#define PUMP_WATERING  "watering"
 #define LAMP  "lamp"
 #define WARNING  "warning"
 #define ERROR  "error"
@@ -149,11 +145,12 @@ bool first_start = true;
 // Declare pins
 #define DHT11PIN  3
 #define ONE_WIRE_BUS  2
-#define S1_SUBSTRATEPIN  A0
-#define S2_WATERINGPIN  A1
-#define S4_MISTINGPIN  A6
-#define P2_WATERINGPIN  4
-#define P1_MISTINGPIN  5
+#define SUBSTRATE_FULLPIN  A0
+#define SUBSTRATE_DELIVEREDPIN  A1
+#define WATER_LEVELPIN  A6
+#define SUBSTRATE_LEVELPIN  A7
+#define PUMP_WATERINGPIN  4
+#define PUMP_MISTINGPIN  5
 #define LAMPPIN  7
 
 
@@ -214,36 +211,37 @@ void loop()
 
   if(fast_timer) {
     // check level sensors
-    read_levels();
-    // check for overloading substrate
-    if(substrate_tank = false && states[S1_SUBSTRATE])
-      states[WARNING] = INFO_SUBSTRATE_FULL;
+    check_levels();
     // prevent redundant update
     if(menuEditMode == false) {
       // update clock
       read_RTC();
     }
     // manage LCD
-    if( states[ERROR] != NO_ERROR )
+    if(states[ERROR] != NO_ERROR)
       lcdAlert();
-    else if( states[WARNING] != NO_WARNING )
+    else
+    if(states[WARNING] != NO_WARNING)
       lcdWarning();
-    else if( menuItem != HOME 
-        && last_touch+60 < seconds() )
+    else
+    if(menuItem != HOME && last_touch+60 < seconds())
       lcdShowMenu(HOME);
-    else if( menuEditMode )
+    else
+    if(menuEditMode)
       lcdEditMenu(menuItem, menuEditCursor);
     else
       lcdShowMenu(menuItem);
   }
 
-  if(slow_timer || first_start) {
-    // error checking
+  if(slow_timer) {
+    // system check
     doCheck();
-    // main actions
-    doAction();
+    // manage light
+    doLight();
+    // manage misting and watering
+    //work();
     // save settings
-    if( storage.changed && storage_ok ) {
+    if(storage.changed && storage_ok) {
       // WARNING: EEPROM can burn!
       storage_ok = storage.save();
       storage.changed = false;
@@ -253,7 +251,6 @@ void loop()
       // switch off backlight
       lcdBacklightToggle();
     }
-    first_start = false;
   }
   
   // update push buttons
@@ -280,7 +277,7 @@ void read_RTC() {
   #endif
 }
 
-void set_RTC(uint16_t _cdn, uint16_t _dtime) {
+/*void set_RTC(uint16_t _cdn, uint16_t _dtime) {
   //RTC.setRAM(54, (uint8_t *)0xffff, sizeof(uint16_t));
   //RTC.getRAM(54, (uint8_t *)0xffff, sizeof(uint16_t));
   RTC.stopClock();
@@ -302,7 +299,7 @@ void set_RTC(uint16_t _cdn, uint16_t _dtime) {
   RTC.setTime();
   //RTC.setRAM(54, (uint8_t *)0xaa55, sizeof(uint16_t));
   RTC.startClock();
-}
+}*/
 
 bool read_DHT11() {
   dht11 DHT11;
@@ -363,25 +360,28 @@ bool read_BH1750() {
   return true;
 }
 
-void read_levels() {
-  pinMode(S1_SUBSTRATEPIN, INPUT_PULLUP);
-  if(digitalRead(S1_SUBSTRATEPIN) == 1) {
-    states[S1_SUBSTRATE] = true;
-  } else {
-    states[S1_SUBSTRATE] = false;
-  }
-  pinMode(S2_WATERINGPIN, INPUT_PULLUP);
-  if(digitalRead(S2_WATERINGPIN) == 0) {
-    states[S2_WATERING] = true;
-  } else {
-    states[S2_WATERING] = false;
+void check_levels() {
+  pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
+  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 0) {
+    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
+    return;
   }
   // no pull-up for A6 and A7
-  pinMode(S4_MISTINGPIN, INPUT);
-  if(analogRead(S4_MISTINGPIN) > 300) {
-    states[S4_MISTING] = true;
-  } else {
-    states[S4_MISTING] = false;
+  pinMode(SUBSTRATE_LEVELPIN, INPUT);
+  if(analogRead(SUBSTRATE_LEVELPIN) < 300) {
+    states[ERROR] = ERROR_NO_SUBSTRATE;
+    return;
+  }
+  // no pull-up for A6 and A7
+  pinMode(WATER_LEVELPIN, INPUT);
+  if(analogRead(WATER_LEVELPIN) < 300) {
+    states[WARNING] = WARNING_NO_WATER;
+    return;
+  }
+  pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
+  if(digitalRead(SUBSTRATE_FULLPIN) == 0) {
+    states[WARNING] = INFO_SUBSTRATE_FULL;
+    return;
   }
 }
 
@@ -414,14 +414,14 @@ void relayOff(const char* relay) {
 }
 
 bool relays(const char* relay, uint8_t state) {
-  if(strcmp(relay, P1_MISTING) == 0) {
-    pinMode(P1_MISTINGPIN, OUTPUT);
-    digitalWrite(P1_MISTINGPIN, state);
+  if(strcmp(relay, PUMP_MISTING) == 0) {
+    pinMode(PUMP_MISTINGPIN, OUTPUT);
+    digitalWrite(PUMP_MISTINGPIN, state);
     return true;
   } 
-  if(strcmp(relay, P2_WATERING) == 0) {
-    pinMode(P2_WATERINGPIN, OUTPUT);    
-    digitalWrite(P2_WATERINGPIN, state);
+  if(strcmp(relay, PUMP_WATERING) == 0) {
+    pinMode(PUMP_WATERINGPIN, OUTPUT);    
+    digitalWrite(PUMP_WATERINGPIN, state);
     return true;
   } 
   if(strcmp(relay, LAMP) == 0) {
@@ -448,58 +448,46 @@ void doCheck() {
     states[ERROR] = ERROR_EEPROM;
     return;
   }
-  // check and read DHT11 sensor
+  // read and check DHT11 sensor
   if(read_DHT11() == false) {
-    //states[ERROR] = ERROR_DHT11;
-    //return;
+    states[ERROR] = ERROR_DHT11;
+    return;
   }
-  // check and read BH1750 sensor
+  // read and check BH1750 sensor
   if(read_BH1750() == false) {
-    //states[ERROR] = ERROR_BH1750;
-    //return;
+    states[ERROR] = ERROR_BH1750;
+    return;
   }
-  // check and read DS18B20 sensor
+  // read and check DS18B20 sensor
   if(read_DS18B20() == false) {
-    states[ERROR] = ERROR_NO_SUBSTRATE;
+    states[ERROR] = ERROR_DS18B20;
     return;
   }
   // reset error
   states[ERROR] = NO_ERROR;
 
-  // check water for misting
-  if(states[S4_MISTING] == false) {
-    states[WARNING] = WARNING_NO_WATER;
+  // check substrate temperature
+  if(states[SUBSTRATE_TEMP] <= settings.tempSubsThreshold) {
+    states[WARNING] = WARNING_SUBSTRATE_COLD;
     return;
   }
-  // check substrate temperature
-  if(states[T_SUBSTRATE] <= settings.tempSubsThreshold) {
-    //states[WARNING] = WARNING_SUBSTRATE_COLD;
-    //return;
-  }
-  // if substrate reached flowers
-  if(states[S2_WATERING]) {
-    //states[WARNING] = INFO_SUBSTRATE_DELIVERED;
-    //return;
-  }
   // check air temperature
-  if(states[T_AIR] <= settings.tempThreshold) {
-    //states[WARNING] = WARNING_AIR_COLD;
-    //return;
+  if(states[AIR_TEMP] <= settings.tempThreshold) {
+    states[WARNING] = WARNING_AIR_COLD;
+    return;
   }
-  // save substrate state
-  substrate_tank = states[S1_SUBSTRATE];
+  // check humidity
+  if(states[HUMIDITY] <= settings.humidThreshold) {
+    // have to start misting
+  }
   // reset warning
   states[WARNING] = NO_WARNING;
-}
-
-uint16_t seconds() {
-  return millis()/1000;
 }
 
 void doTest(bool _enable) {
   if(_enable) {
     #ifdef DEBUG
-        printf_P(PSTR("Test: Info: enable.\n\r"));
+      printf_P(PSTR("Test: Info: enable.\n\r"));
     #endif
     // save previous settings
     test = settings;
@@ -511,7 +499,8 @@ void doTest(bool _enable) {
     settings.wateringDayPeriod = 0;
     settings.wateringNightPeriod = 0;
     settings.wateringSunrisePeriod = 0;
-  } else if(settings.lightThreshold == 3000) {
+  } 
+  else if(settings.lightThreshold == 3000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: disable.\n\r"));
     #endif
@@ -576,7 +565,7 @@ void doAction() {
 
 void doLight() {
   // try to up temperature
-  if(states[WARNING] == WARNING_AIR_COLD) {
+  if(states[AIR_TEMP] <= settings.tempThreshold) {
     // turn on lamp
     relayOn(LAMP);
     return;
@@ -689,6 +678,10 @@ void doWatering() {
   #ifdef DEBUG
     printf_P(PSTR("Watering: Info: Resume watering.\n\r"));
   #endif
+}
+
+uint16_t seconds() {
+  return millis()/1000;
 }
 
 void lcdBacklightBlink(uint8_t _count) {
@@ -1038,9 +1031,14 @@ void lcdAlert() {
       fprintf_P(&lcd_out, PSTR("Check connection"));
       lcdTextBlink(1, 0, 15);
       return;
+    case ERROR_DS18B20:
+      fprintf_P(&lcd_out, PSTR("DS18B20 ERROR!  ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Check connection"));
+      lcdTextBlink(1, 0, 15);
+      return;
     case ERROR_NO_SUBSTRATE:
-      fprintf_P(&lcd_out, PSTR("Watering error! ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("Plants can die! "));
+      fprintf_P(&lcd_out, PSTR("No substrate!   ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Plants can die!"));
       lcdTextBlink(1, 0, 14);
       return;
   }  
