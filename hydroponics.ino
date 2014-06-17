@@ -122,7 +122,8 @@ bool substrate_tank;
 #define ERROR_EEPROM  11
 #define ERROR_DHT11  12
 #define ERROR_BH1750  13
-#define ERROR_NO_SUBSTRATE  14
+#define ERROR_DS18B20  14
+#define ERROR_NO_SUBSTRATE  15
 
 // Declare LCD menu items
 #define HOME  0
@@ -305,10 +306,10 @@ bool read_DHT11() {
   dht11 DHT11;
   if( DHT11.read(DHT11PIN) == DHTLIB_OK ) {
     states[HUMIDITY] = DHT11.humidity;
-    states[T_AIR] = DHT11.temperature;
+    states[AIR_TEMP] = DHT11.temperature;
     #ifdef DEBUG
       printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
-        states[HUMIDITY], states[T_AIR]);
+        states[HUMIDITY], states[AIR_TEMP]);
     #endif
     return true;
   }
@@ -330,7 +331,7 @@ bool read_DS18B20() {
   #ifdef DEBUG
     printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
   #endif
-  states[T_COMPUTER] = value;
+  states[COMPUTER_TEMP] = value;
   
   value = dallas.getTempCByIndex(1);
   if(value == DEVICE_DISCONNECTED_C) {
@@ -340,7 +341,7 @@ bool read_DS18B20() {
   #ifdef DEBUG
     printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
   #endif
-  states[T_SUBSTRATE] = value;
+  states[SUBSTRATE_TEMP] = value;
   return true;
 }
 
@@ -626,9 +627,9 @@ void doMisting() {
     return;
   }
   // misting for 2 sec
-  relayOn(P1_MISTING);
+  relayOn(PUMP_MISTING);
   delay(3000); // freeze system
-  relayOff(P1_MISTING);
+  relayOff(PUMP_MISTING);
   
   last_misting = seconds();
   start_misting = false;
@@ -640,7 +641,7 @@ void doWatering() {
   states[WARNING] = WARNING_WATERING;
   // start watering
   if(start_watering == 0) {
-    relayOn(P2_WATERING);
+    relayOn(PUMP_WATERING);
     start_watering = seconds();
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Start watering.\n\r"));
@@ -648,7 +649,7 @@ void doWatering() {
     return;
   }
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
-    relayOff(P2_WATERING);
+    relayOff(PUMP_WATERING);
     last_watering = seconds();
     start_watering = 0;
     #ifdef DEBUG
@@ -658,7 +659,7 @@ void doWatering() {
   }
   // emergency off after 90 sec
   if(start_watering+90 < seconds()) {
-    relayOff(P2_WATERING);
+    relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     last_watering = seconds();
     start_watering = 0;
@@ -668,13 +669,13 @@ void doWatering() {
   // pause for clean pump
   if(start_watering+30 < seconds() &&
       start_watering+30+15 > seconds()) {
-    relayOff(P2_WATERING);
+    relayOff(PUMP_WATERING);
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause.\n\r"));
     #endif
     return;
   }
-  relayOn(P2_WATERING);
+  relayOn(PUMP_WATERING);
   #ifdef DEBUG
     printf_P(PSTR("Watering: Info: Resume watering.\n\r"));
   #endif
@@ -807,11 +808,11 @@ void showHomeScreen() {
   switch (menuHomeItem) {
     case 0:
       fprintf_P(&lcd_out, PSTR("Air: %c %2d%c %c %2d%%"), 
-        temp_c, states[T_AIR], celcium_c, humidity_c, states[HUMIDITY]);
+        temp_c, states[AIR_TEMP], celcium_c, humidity_c, states[HUMIDITY]);
       break;
     case 4:
       fprintf_P(&lcd_out, PSTR("Substrate: %c %2d%c"), 
-        temp_c, states[T_SUBSTRATE], celcium_c);
+        temp_c, states[SUBSTRATE_TEMP], celcium_c);
       break;
     case 8:
       fprintf_P(&lcd_out, PSTR("Light: %c %3d lux"), 
@@ -819,7 +820,7 @@ void showHomeScreen() {
       break;
     case 12:
       fprintf_P(&lcd_out, PSTR("Computer:  %c %2d%c"), 
-        temp_c, states[T_COMPUTER], celcium_c);
+        temp_c, states[COMPUTER_TEMP], celcium_c);
       break;
   }
   menuHomeItem++;
