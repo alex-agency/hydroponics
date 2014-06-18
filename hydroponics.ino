@@ -82,7 +82,7 @@ uint16_t sunrise_dtime;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t last_touch = 0;
-bool start_misting = false;
+uint16_t start_misting = 0;
 uint16_t start_watering = 0;
 bool menuEditMode;
 uint8_t menuEditCursor;
@@ -90,7 +90,6 @@ uint8_t menuItem;
 uint8_t menuHomeItem;
 bool lcdBlink;
 bool lcdBacklight = true;
-bool substrate_tank;
 
 // Declare constants
 #define CDN  "cdn" // days after 2000-01-01
@@ -213,6 +212,10 @@ void loop()
   if(fast_timer) {
     // check level sensors
     check_levels();
+    // update watering
+    watering();
+    // update misting
+    misting();
     // prevent redundant update
     if(menuEditMode == false) {
       // update clock
@@ -240,7 +243,7 @@ void loop()
     // manage light
     doLight();
     // manage misting and watering
-    //work();
+    doWork();
     // save settings
     if(storage.changed && storage_ok) {
       // WARNING: EEPROM can burn!
@@ -510,57 +513,46 @@ void doTest(bool _enable) {
   }
 }
 
-void doAction() {
-  // don't do any action while error
+void doWork() {
+  // don't do any work while error
   if(states[ERROR] != NO_ERROR) {
-    return;
-  }
-  // manage light
-  doLight();
-  // check humidity
-  if(states[HUMIDITY] <= settings.humidThreshold) {
-    #ifdef DEBUG
-      printf_P(PSTR("Action: Info: Low humidity.\n\r"), seconds());
-    #endif
-    doMisting();
     return;
   }
   // day time
   if(settings.daytimeFrom <= RTC.hour && RTC.hour < settings.daytimeTo) {
     #ifdef DEBUG
-      printf_P(PSTR("Action: Info: Day time. Now: %d sec.\n\r"), seconds());
+      printf_P(PSTR("Work: Info: Day time.\n\r"));
     #endif
     if(seconds() > last_watering + (settings.wateringDayPeriod*60)) {
-      doWatering();
+      start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
-      doMisting();
+      start_misting = seconds();
     }
     return;
   }
   // night time 
   if(settings.nighttimeFrom <= RTC.hour || RTC.hour < settings.nighttimeTo) {
     #ifdef DEBUG
-      printf_P(PSTR("Action: Info: Night time. Now: $d sec.\n\r"), seconds());
+      printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
     if(seconds() > last_watering + (settings.wateringNightPeriod*60)) {
-      doWatering();
+      start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
-      doMisting();
+      start_misting = seconds();
     }
     return;
   }
   #ifdef DEBUG
-    printf_P(PSTR("Action: Info: Between day and night time. Now: %d sec.\n\r"), 
-      seconds());
+    printf_P(PSTR("Work: Info: Between day and night time.\n\r"));
   #endif
   // sunrise or sunset time
   if(seconds() > last_watering + (settings.wateringSunrisePeriod*60)) {
-    doWatering();
+    start_watering = seconds();
   }
   if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
-    doMisting();
+    start_misting = seconds();
   }
 }
 
@@ -615,70 +607,72 @@ void doLight() {
   relayOff(LAMP);
 }
 
-void doMisting() {
-  if(states[WARNING] == WARNING_NO_WATER)
-    return;
-  // start misting
-  if(start_misting == false) {
-    start_misting = true;
-    #ifdef DEBUG
-      printf_P(PSTR("Misting: Info: Start misting.\n\r"));
-    #endif
+void misting() {
+  if(start_misting == 0) {
     return;
   }
-  // misting for 2 sec
+  // stop misting after 2 sec
+  if(start_misting +2 <= seconds()) {
+    #ifdef DEBUG
+      printf_P(PSTR("Misting: Info: Stop misting.\n\r"));
+    #endif
+    relayOff(PUMP_MISTING);
+    last_misting = start_misting;
+    start_misting = 0;
+    if(states[WARNING] == WARNING_MISTING)
+      states[WARNING] = NO_WARNING;
+    return;
+  }
+  #ifdef DEBUG
+    printf_P(PSTR("Misting: Info: Misting...\n\r"));
+  #endif
+  states[WARNING] = WARNING_MISTING;
   relayOn(PUMP_MISTING);
-  delay(3000); // freeze system
-  relayOff(PUMP_MISTING);
-  
-  last_misting = seconds();
-  start_misting = false;
 }
 
-void doWatering() {
-  if(states[WARNING] == WARNING_SUBSTRATE_COLD)
-    return;
-  states[WARNING] = WARNING_WATERING;
-  // start watering
+void watering() {
   if(start_watering == 0) {
-    relayOn(PUMP_WATERING);
-    start_watering = seconds();
-    #ifdef DEBUG
-      printf_P(PSTR("Watering: Info: Start watering.\n\r"));
-    #endif
     return;
   }
-  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
-    relayOff(PUMP_WATERING);
-    last_watering = seconds();
-    start_watering = 0;
-    #ifdef DEBUG
-      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
-    #endif
-    return;
-  }
-  // emergency off after 90 sec
-  if(start_watering+90 < seconds()) {
+  // emergency stop after 90 sec
+  if(start_watering +90 <= seconds()) {
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
-    last_watering = seconds();
+    last_watering = start_watering;
     start_watering = 0;
     printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
     return;
   }
-  // pause for clean pump
-  if(start_watering+30 < seconds() &&
-      start_watering+30+15 > seconds()) {
-    relayOff(PUMP_WATERING);
+  // pause for clean pump for 15 sec
+  if(start_watering +30 <= seconds() &&
+      start_watering +30+15 > seconds()) {
     #ifdef DEBUG
-      printf_P(PSTR("Watering: Info: Pause.\n\r"));
+      printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
+    relayOff(PUMP_WATERING);
     return;
   }
-  relayOn(PUMP_WATERING);
+  // stop watering
+  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
+    #endif
+    relayOff(PUMP_WATERING);
+    last_watering = start_watering;
+    start_watering = 0;
+    if(states[WARNING] == WARNING_WATERING)
+      states[WARNING] = NO_WARNING;
+    return;
+  }
+  // prevent starting without substrate
+  if(states[WARNING] == ERROR_NO_SUBSTRATE) {
+    return;
+  }
   #ifdef DEBUG
-    printf_P(PSTR("Watering: Info: Resume watering.\n\r"));
+    printf_P(PSTR("Misting: Info: Start or Resume watering.\n\r"));
   #endif
+  states[WARNING] = WARNING_WATERING;
+  relayOn(PUMP_WATERING);
 }
 
 uint16_t seconds() {
