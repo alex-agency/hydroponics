@@ -111,9 +111,10 @@ bool lcdBacklight = true;
 #define WARNING_SUBSTRATE_LOW  2
 #define INFO_SUBSTRATE_DELIVERED  3
 #define WARNING_WATERING  4
-#define WARNING_AIR_COLD  5
-#define WARNING_SUBSTRATE_COLD  6
-#define WARNING_NO_WATER  7
+#define WARNING_MISTING  5
+#define WARNING_AIR_COLD  6
+#define WARNING_SUBSTRATE_COLD  7
+#define WARNING_NO_WATER  8
 
 // Declare error states
 #define NO_ERROR  0
@@ -176,7 +177,7 @@ void setup()
   lcd.createChar(temp_c, temp_char);
   lcd.createChar(flower_c, flower_char);
   lcd.createChar(lamp_c, lamp_char);
-  lcd.clear();
+  lcd.home();
   
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
@@ -193,12 +194,14 @@ void setup()
 
   // Configure buttons
   rightButton.attachClick( rightButtonClick );
+  rightButton.attachDoubleClick( rightButtonDoubleClick );
   rightButton.attachLongPressStart( buttonsLongPress );
   leftButton.attachClick( leftButtonClick );
+  leftButton.attachDoubleClick( leftButtonDoubleClick );
   leftButton.attachLongPressStart( buttonsLongPress );
 
   // "R2D2" melody
-  melody.play(R2D2); 
+  //melody.play(R2D2); 
 }
 
 //
@@ -228,7 +231,9 @@ void loop()
     if(states[WARNING] != NO_WARNING)
       lcdWarning();
     else
-    if(menuItem != HOME && last_touch+60 < seconds())
+    if(menuItem != HOME && 
+        last_touch+60 < seconds() &&
+        settings.lightThreshold != 3000)
       lcdShowMenu(HOME);
     else
     if(menuEditMode)
@@ -366,19 +371,23 @@ bool read_BH1750() {
 
 void check_levels() {
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
-  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 0) {
+  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
     states[WARNING] = INFO_SUBSTRATE_DELIVERED;
     return;
   }
+  #ifdef DEBUG
+    //printf_P(PSTR("SUBSTRATE_LEVELPIN: %d.\n\r"), analogRead(SUBSTRATE_LEVELPIN));
+    //printf_P(PSTR("WATER_LEVELPIN: %d.\n\r"), analogRead(WATER_LEVELPIN));
+  #endif
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
-  if(analogRead(SUBSTRATE_LEVELPIN) < 300) {
+  if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     states[ERROR] = ERROR_NO_SUBSTRATE;
     return;
   }
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
-  if(analogRead(WATER_LEVELPIN) < 300) {
+  if(analogRead(WATER_LEVELPIN) > 700) {
     states[WARNING] = WARNING_NO_WATER;
     return;
   }
@@ -497,12 +506,12 @@ void doTest(bool _enable) {
     test = settings;
     // change settings for test
     settings.lightThreshold = 3000;
-    settings.mistingDayPeriod = 2;
-    settings.mistingNightPeriod = 2;
-    settings.mistingSunrisePeriod = 2;
-    settings.wateringDayPeriod = 0;
-    settings.wateringNightPeriod = 0;
-    settings.wateringSunrisePeriod = 0;
+    settings.mistingDayPeriod = 0;
+    settings.mistingNightPeriod = 0;
+    settings.mistingSunrisePeriod = 0;
+    settings.wateringDayPeriod = 5;
+    settings.wateringNightPeriod = 5;
+    settings.wateringSunrisePeriod = 5;
   } 
   else if(settings.lightThreshold == 3000) {
     #ifdef DEBUG
@@ -510,6 +519,10 @@ void doTest(bool _enable) {
     #endif
     // restore previous settings
     settings = test;
+    #ifdef DEBUG
+      printf_P(PSTR("Test: Info: test.lightThreshold = %d.\n\r"),
+       test.lightThreshold);
+    #endif
   }
 }
 
@@ -611,8 +624,8 @@ void misting() {
   if(start_misting == 0) {
     return;
   }
-  // stop misting after 2 sec
-  if(start_misting +2 <= seconds()) {
+  // stop misting
+  if(start_misting + misting_duration <= seconds()) {
     #ifdef DEBUG
       printf_P(PSTR("Misting: Info: Stop misting.\n\r"));
     #endif
@@ -635,7 +648,7 @@ void watering() {
     return;
   }
   // emergency stop after 90 sec
-  if(start_watering +90 <= seconds()) {
+  if(start_watering +60 <= seconds()) {
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     last_watering = start_watering;
@@ -644,8 +657,8 @@ void watering() {
     return;
   }
   // pause for clean pump for 15 sec
-  if(start_watering +30 <= seconds() &&
-      start_watering +30+15 > seconds()) {
+  if(start_watering +15 <= seconds() &&
+      start_watering +15+15 > seconds()) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -775,8 +788,9 @@ void lcdShowMenu(uint8_t _menuItem) {
       fprintf_P(&lcd_out, PSTR("       -> Start?"));
       lcdTextBlink(1, 10, 15);
       return;
+    case 255:  
+      menuItem = CLOCK;
     case CLOCK:
-    case HOME-1:
       fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d"), 
         RTC.hour, RTC.minute, RTC.second); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Date: %02d-%02d-%4d"), 
@@ -784,6 +798,7 @@ void lcdShowMenu(uint8_t _menuItem) {
       return;
     default:
       menuItem = HOME;
+      menuHomeItem = 0;
   }
 }
 
@@ -927,6 +942,7 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       return 4;
     default:
       menuItem = HOME;
+      menuHomeItem = 0;
       return 0;
   }
 }
@@ -966,15 +982,20 @@ void lcdWarning() {
     case INFO_SUBSTRATE_FULL:
       fprintf_P(&lcd_out, PSTR("Substrate tank  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("is full! :)))   "));
-      melody.beep(3);
+      melody.beep(1);
       return;
     case INFO_SUBSTRATE_DELIVERED:
       fprintf_P(&lcd_out, PSTR("Substrate was   ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("delivered! :))) "));
-      melody.beep(3);
+      melody.beep(1);
       return;
     case WARNING_WATERING:
       fprintf_P(&lcd_out, PSTR("Watering...     ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Please wait.    "));
+      lcdTextBlink(1, 0, 11);
+      return;
+    case WARNING_MISTING:
+      fprintf_P(&lcd_out, PSTR("Misting...      ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Please wait.    "));
       lcdTextBlink(1, 0, 11);
       return;
@@ -1047,6 +1068,16 @@ void rightButtonClick() {
   buttonsShortClick(+1);
 }
 
+void leftButtonDoubleClick() {
+  buttonsShortClick(-1);
+  buttonsShortClick(-1);
+}
+
+void rightButtonDoubleClick() {
+  buttonsShortClick(+1);
+  buttonsShortClick(+1);
+}
+
 void buttonsShortClick(int _direction) {
   #ifdef DEBUG_LCD 
     printf_P(
@@ -1111,6 +1142,9 @@ void buttonsShortClick(int _direction) {
     case T_SUBSTRATE_THRESHOLD:
       settings.tempSubsThreshold =+ _direction;
       return;
+    case TEST:
+      storage.changed = false;
+      doTest(false);
     case CLOCK:
       settingClock(_direction);
       // clock not used storage
@@ -1118,12 +1152,13 @@ void buttonsShortClick(int _direction) {
       return;
     default:
       menuItem = HOME;
+      menuHomeItem = 0;
   }
 }
 
 void settingClock(int _direction) {
   #ifdef DEBUG_LCD
-    printf_P(PSTR("Button: Info: Clock settings. Stop clock.\n\r")));
+    printf_P(PSTR("Button: Info: Clock settings. Stop clock.\n\r"));
   #endif
   RTC.stopClock();
   switch (menuEditCursor) {
