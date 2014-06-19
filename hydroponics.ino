@@ -87,7 +87,6 @@ Melody melody(8);
 #define LAMP  "lamp"
 #define WARNING  "warning"
 #define ERROR  "error"
-#define DEFAULT_SUNRISE  300 // sunrise at 5 o'clock
 
 // Declare warning states
 #define NO_WARNING  0
@@ -142,7 +141,6 @@ Melody melody(8);
 EEPROM storage;
 bool storage_ok;
 uint16_t last_lightOn = 0;
-uint16_t sunrise_dtime = DEFAULT_SUNRISE;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t last_touch = 0;
@@ -201,7 +199,7 @@ void setup()
   leftButton.attachLongPressStart( buttonsLongPress );
 
   // "R2D2" melody
-  //melody.play(R2D2); 
+  melody.play(R2D2); 
 }
 
 //
@@ -233,7 +231,7 @@ void loop()
     else
     if(menuItem != HOME && 
         last_touch+60 < seconds() &&
-        settings.lightThreshold != 3000)
+        menuItem != TEST)
       lcdShowMenu(HOME);
     else
     if(menuEditMode)
@@ -375,10 +373,6 @@ void check_levels() {
     states[WARNING] = INFO_SUBSTRATE_DELIVERED;
     return;
   }
-  #ifdef DEBUG
-    //printf_P(PSTR("SUBSTRATE_LEVELPIN: %d.\n\r"), analogRead(SUBSTRATE_LEVELPIN));
-    //printf_P(PSTR("WATER_LEVELPIN: %d.\n\r"), analogRead(WATER_LEVELPIN));
-  #endif
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
@@ -491,48 +485,39 @@ void doCheck() {
   }
   // check humidity
   if(states[HUMIDITY] <= settings.humidThreshold) {
-    // have to start misting
+    misting_duration = 3; // do for 3 sec
   }
   // reset warning
   states[WARNING] = NO_WARNING;
 }
 
-/*void doTest(bool _enable) {
-  // in test already
-  if(_enable && settings.lightThreshold == 3000) {
-  	misting_duration = 15;
-    return;
-  }
-
-  if(_enable) {
-    #ifdef DEBUG
-      printf_P(PSTR("Test: Info: enable.\n\r"));
-    #endif
-    // save previous settings
-    test = settings;
-    // change settings for test
-    settings.lightThreshold = 3000;
-    sunrise_dtime = states[DTIME];
-    settings.mistingDayPeriod = 0;
-    settings.mistingNightPeriod = 0;
-    settings.mistingSunrisePeriod = 0;
-    settings.wateringDayPeriod = 5;
-    settings.wateringNightPeriod = 5;
-    settings.wateringSunrisePeriod = 5;
-  } 
-  else if(settings.lightThreshold == 3000) {
+void doTest(bool start) {
+  if(start == false) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: disable.\n\r"));
-    #endif
+    #endif    
     // restore previous settings
     settings = test;
-    sunrise_dtime = DEFAULT_SUNRISE;
-    #ifdef DEBUG
-      printf_P(PSTR("Test: Info: test.lightThreshold = %d.\n\r"),
-       test.lightThreshold);
-    #endif
   }
-}*/
+  if(settings.lightThreshold == 3000) {
+    misting_duration = 15;
+    return;
+  }
+  #ifdef DEBUG
+    printf_P(PSTR("Test: Info: enable.\n\r"));
+  #endif
+  // save previous settings
+  test = settings;
+  // change settings for test
+  settings.lightThreshold = 3000;
+  settings.sunrise = states[DTIME];
+  settings.mistingDayPeriod = 1;
+  settings.mistingNightPeriod = 1;
+  settings.mistingSunrisePeriod = 1;
+  settings.wateringDayPeriod = 3;
+  settings.wateringNightPeriod = 3;
+  settings.wateringSunrisePeriod = 3;
+}
 
 void doWork() {
   // don't do any work while error
@@ -597,22 +582,23 @@ void doLight() {
     if(seconds() > last_lightOn + 30*60 && 
         RTC.hour > 2 && RTC.hour <= 8) {
       // sunrise in minutes
-      sunrise_dtime = states[DTIME]-30;
+      settings.sunrise = states[DTIME]-30;
+      storage.changed = true;
       #ifdef DEBUG
         printf_P(PSTR("Light: Info: New sunrise at: %02d:%02d.\n\r"), 
-          sunrise_dtime/60, sunrise_dtime%60);
+          settings.sunrise/60, settings.sunrise%60);
       #endif
       return;
     }
-    sunrise_dtime = DEFAULT_SUNRISE;
+    settings.sunrise = 5*60; // at 5 o'clock
     #ifdef DEBUG
       printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
     #endif
     return;
   }
-  
-  uint16_t lightOff = sunrise_dtime+(settings.lightDayDuration*60);
-  if(sunrise_dtime > 0 && states[DTIME] <= lightOff) {
+
+  uint16_t lightOff = settings.sunrise+(settings.lightDayDuration*60);
+  if(settings.sunrise > 0 && states[DTIME] <= lightOff) {
     #ifdef DEBUG
       printf_P(PSTR("Light: Info: Lamp On till: %02d:%02d.\n\r"), 
         lightOff/60, lightOff%60);
@@ -621,7 +607,6 @@ void doLight() {
     relayOn(LAMP);
     return;
   }
-  
   last_lightOn = 0;
   // turn off lamp
   relayOff(LAMP);
