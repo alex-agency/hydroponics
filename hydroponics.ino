@@ -74,23 +74,6 @@ OneButton leftButton(A3, true);
 // Set up Speaker digital pin
 Melody melody(8);
 
-// Declare variables
-EEPROM storage;
-bool storage_ok;
-uint16_t last_lightOn = 0;
-uint16_t sunrise_dtime;
-uint16_t last_misting = 0;
-uint16_t last_watering = 0;
-uint16_t last_touch = 0;
-uint16_t start_misting = 0;
-uint16_t start_watering = 0;
-bool menuEditMode;
-uint8_t menuEditCursor;
-uint8_t menuItem;
-uint8_t menuHomeItem;
-bool lcdBlink;
-bool lcdBacklight = true;
-
 // Declare constants
 #define CDN  "cdn" // days after 2000-01-01
 #define DTIME  "dtime" // minutes after 00:00
@@ -104,6 +87,7 @@ bool lcdBacklight = true;
 #define LAMP  "lamp"
 #define WARNING  "warning"
 #define ERROR  "error"
+#define DEFAULT_SUNRISE  300 // sunrise at 5 o'clock
 
 // Declare warning states
 #define NO_WARNING  0
@@ -154,6 +138,22 @@ bool lcdBacklight = true;
 #define PUMP_MISTINGPIN  5
 #define LAMPPIN  7
 
+// Declare variables
+EEPROM storage;
+bool storage_ok;
+uint16_t last_lightOn = 0;
+uint16_t sunrise_dtime = DEFAULT_SUNRISE;
+uint16_t last_misting = 0;
+uint16_t last_watering = 0;
+uint16_t last_touch = 0;
+uint8_t misting_duration = 0;
+uint16_t start_watering = 0;
+bool menuEditMode;
+uint8_t menuEditCursor;
+uint8_t menuItem;
+uint8_t menuHomeItem;
+bool lcdBlink;
+bool lcdBacklight = true;
 
 /****************************************************************************/
 
@@ -497,7 +497,13 @@ void doCheck() {
   states[WARNING] = NO_WARNING;
 }
 
-void doTest(bool _enable) {
+/*void doTest(bool _enable) {
+  // in test already
+  if(_enable && settings.lightThreshold == 3000) {
+  	misting_duration = 15;
+    return;
+  }
+
   if(_enable) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: enable.\n\r"));
@@ -506,6 +512,7 @@ void doTest(bool _enable) {
     test = settings;
     // change settings for test
     settings.lightThreshold = 3000;
+    sunrise_dtime = states[DTIME];
     settings.mistingDayPeriod = 0;
     settings.mistingNightPeriod = 0;
     settings.mistingSunrisePeriod = 0;
@@ -519,12 +526,13 @@ void doTest(bool _enable) {
     #endif
     // restore previous settings
     settings = test;
+    sunrise_dtime = DEFAULT_SUNRISE;
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: test.lightThreshold = %d.\n\r"),
        test.lightThreshold);
     #endif
   }
-}
+}*/
 
 void doWork() {
   // don't do any work while error
@@ -540,7 +548,7 @@ void doWork() {
       start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
-      start_misting = seconds();
+      misting_duration = 3; // do for 3 sec
     }
     return;
   }
@@ -553,7 +561,7 @@ void doWork() {
       start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
-      start_misting = seconds();
+      misting_duration = 3; // do for 3 sec
     }
     return;
   }
@@ -565,7 +573,7 @@ void doWork() {
     start_watering = seconds();
   }
   if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
-    start_misting = seconds();
+    misting_duration = 3; // do for 3 sec
   }
 }
 
@@ -596,8 +604,7 @@ void doLight() {
       #endif
       return;
     }
-    // default sunrise at 5 o'clock
-    sunrise_dtime = 5*60; // minutes
+    sunrise_dtime = DEFAULT_SUNRISE;
     #ifdef DEBUG
       printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
     #endif
@@ -621,39 +628,50 @@ void doLight() {
 }
 
 void misting() {
-  if(start_misting == 0) {
-    return;
-  }
-  // stop misting
-  if(start_misting + misting_duration <= seconds()) {
-    #ifdef DEBUG
-      printf_P(PSTR("Misting: Info: Stop misting.\n\r"));
-    #endif
-    relayOff(PUMP_MISTING);
-    last_misting = start_misting;
-    start_misting = 0;
-    if(states[WARNING] == WARNING_MISTING)
-      states[WARNING] = NO_WARNING;
+  if(misting_duration == 0) {
+    // stop misting
+    if(states[PUMP_MISTING]) {
+      #ifdef DEBUG
+        printf_P(PSTR("Misting: Info: Stop misting.\n\r"));
+      #endif
+      relayOff(PUMP_MISTING);
+      if(states[WARNING] == WARNING_MISTING)
+        states[WARNING] = NO_WARNING;
+    }
     return;
   }
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Misting...\n\r"));
   #endif
   states[WARNING] = WARNING_MISTING;
+  misting_duration--;
+  last_misting = seconds();
   relayOn(PUMP_MISTING);
 }
 
 void watering() {
-  if(start_watering == 0) {
+  if(start_watering == 0 && 
+  	  states[PUMP_WATERING] == false) {
     return;
   }
-  // emergency stop after 90 sec
-  if(start_watering +60 <= seconds()) {
+  // emergency stop
+  if(states[WARNING] == ERROR_NO_SUBSTRATE ||
+  	  start_watering +90 <= seconds()) {
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
-    last_watering = start_watering;
     start_watering = 0;
     printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
+    return;
+  }
+  // stop watering
+  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
+    #endif
+    relayOff(PUMP_WATERING);
+    start_watering = 0;
+    if(states[WARNING] == WARNING_WATERING)
+      states[WARNING] = NO_WARNING;
     return;
   }
   // pause for clean pump for 15 sec
@@ -665,26 +683,11 @@ void watering() {
     relayOff(PUMP_WATERING);
     return;
   }
-  // stop watering
-  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
-    #ifdef DEBUG
-      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
-    #endif
-    relayOff(PUMP_WATERING);
-    last_watering = start_watering;
-    start_watering = 0;
-    if(states[WARNING] == WARNING_WATERING)
-      states[WARNING] = NO_WARNING;
-    return;
-  }
-  // prevent starting without substrate
-  if(states[WARNING] == ERROR_NO_SUBSTRATE) {
-    return;
-  }
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Start or Resume watering.\n\r"));
   #endif
   states[WARNING] = WARNING_WATERING;
+  last_watering = seconds();
   relayOn(PUMP_WATERING);
 }
 
