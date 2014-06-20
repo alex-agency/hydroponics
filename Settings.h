@@ -16,6 +16,7 @@
 
 #define EEPROM_SIZE  256 
 //#define EEPROM_OFFSET
+#define MAX_WRITES  20
 
 // Declare EEPROM values
 #define SETTINGS_ID "s8"
@@ -69,6 +70,12 @@ class EEPROM
     }
 
     bool save() {
+      // prevent to burn EEPROM
+      if(writes_count >= MAX_WRITES) {
+        printf_P(PSTR("EEPROM: Error: Reached limit %d writes!\n\r"), 
+          MAX_WRITES);
+        return false;
+      }
       // move on store position
       #ifdef EEPROM_OFFSET 
         address_offset++;
@@ -100,6 +107,7 @@ class EEPROM
 
   private:
     uint8_t address_offset;
+    uint16_t writes_count = 0;
 
     template <class T> void readBlock(uint16_t _address, const T& _value) {
        eeprom_read_block((void*)&_value, (const void*)_address, sizeof(_value));
@@ -122,6 +130,7 @@ class EEPROM
         _address++;
         bytePointer++;
       }
+      writes_count += writeCount;
       printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), 
         writeCount);
       #ifdef DEBUG

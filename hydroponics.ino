@@ -140,7 +140,6 @@ Melody melody(8);
 // Declare variables
 EEPROM storage;
 bool storage_ok;
-uint16_t last_lightOn = 0;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t last_touch = 0;
@@ -152,6 +151,7 @@ uint8_t menuItem;
 uint8_t menuHomeItem;
 bool lcdBlink;
 bool lcdBacklight = true;
+bool substrate_full;
 
 /****************************************************************************/
 
@@ -366,15 +366,15 @@ bool read_BH1750() {
 }
 
 void check_levels() {
-  pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
-  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
-    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
-    return;
-  }
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     states[ERROR] = ERROR_NO_SUBSTRATE;
+    return;
+  }
+  pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
+  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
+    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
     return;
   }
   // no pull-up for A6 and A7
@@ -384,10 +384,14 @@ void check_levels() {
     return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
-  if(digitalRead(SUBSTRATE_FULLPIN) == 1) {
-    states[WARNING] = INFO_SUBSTRATE_FULL;
-    /////// !!!!!!! ///////
-    return;
+  if(digitalRead(SUBSTRATE_FULLPIN) == 1) { 	  
+  	if(substrate_full == false) {
+      substrate_full = true;
+      states[WARNING] = INFO_SUBSTRATE_FULL;
+      return;
+    }
+  } else {
+  	substrate_full = false;
   }
 }
 
@@ -490,17 +494,7 @@ void doCheck() {
   states[WARNING] = NO_WARNING;
 }
 
-void doTest(bool start) {
-  if(start == false && 
-      settings.lightThreshold == 3000) {
-    #ifdef DEBUG
-      printf_P(PSTR("Test: Info: disable.\n\r"));
-    #endif    
-    // restore previous settings
-    settings = test;
-    doWork();
-    return;
-  }
+void doTest(bool start) { 
   if(start && settings.lightThreshold != 3000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: enable.\n\r"));
@@ -513,11 +507,26 @@ void doTest(bool start) {
     settings.mistingDayPeriod = 1;
     settings.mistingNightPeriod = 1;
     settings.mistingSunrisePeriod = 1;
-    misting_duration = 15;
     settings.wateringDayPeriod = 3;
     settings.wateringNightPeriod = 3;
     settings.wateringSunrisePeriod = 3;
-    doWork();  
+    misting_duration = 15;
+    // manage test settings
+    doWork();
+    return;
+  }
+  if(start == false &&
+      settings.lightThreshold == 3000) {
+    #ifdef DEBUG
+      printf_P(PSTR("Test: Info: disable.\n\r"));
+    #endif    
+    // restore previous settings
+    settings = test;
+    // turn all off
+    start_misting = 0;
+    relayOff(PUMP_WATERING);
+    relayOff(LAMP);
+    return;
   }
 }
 
@@ -576,40 +585,41 @@ void doLight() {
     // turn off lamp
     relayOff(LAMP);
     // capture time
-    if(last_lightOn == 0) {
-      last_lightOn = seconds();
+    if(last_light == 0) {
+      last_light = seconds();
       return;
     }
-    // watch 30 minutes
-    if(seconds() > last_lightOn + 30*60 && 
-        RTC.hour > 2 && RTC.hour <= 8) {
+    // watch for 30 minutes
+    if(RTC.hour <= 8 && RTC.hour > 3 && 
+        seconds() > last_light + 30*60) {
+      last_light = seconds();
       // sunrise in minutes
       settings.sunrise = states[DTIME]-30;
-      storage.changed = true;
+  	  // mark for save to EEPROM
+  	  storage.changed = true;
       #ifdef DEBUG
         printf_P(PSTR("Light: Info: New sunrise at: %02d:%02d.\n\r"), 
           settings.sunrise/60, settings.sunrise%60);
       #endif
       return;
     }
-    settings.sunrise = 5*60; // at 5 o'clock
-    #ifdef DEBUG
-      printf_P(PSTR("Light: Info: Set default sunrise time.\n\r"));
-    #endif
     return;
   }
-
-  uint16_t lightOff = settings.sunrise+(settings.lightDayDuration*60);
-  if(settings.sunrise > 0 && states[DTIME] <= lightOff) {
+  #ifdef DEBUG
+    printf_P(PSTR("Light: Info: Today sunrise at: %02d:%02d.\n\r"),
+      settings.sunrise/60, settings.sunrise%60);
+  #endif
+  // keep duration of light day
+  uint16_t lampOn = settings.sunrise+(settings.lightDayDuration*60);
+  if(settings.sunrise > 0 && states[DTIME] <= lampOn) {
     #ifdef DEBUG
       printf_P(PSTR("Light: Info: Lamp On till: %02d:%02d.\n\r"), 
-        lightOff/60, lightOff%60);
+        lampOn/60, lampOn%60);
     #endif
     // turn on lamp
     relayOn(LAMP);
     return;
   }
-  last_lightOn = 0;
   // turn off lamp
   relayOff(LAMP);
 }
@@ -777,7 +787,6 @@ void lcdShowMenu(uint8_t _menuItem) {
       fprintf_P(&lcd_out, PSTR("Test all systems")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("       -> Start?"));
       lcdTextBlink(1, 10, 15);
-      storage.changed = false;
       doTest(false);
       return;
     case 255:  
@@ -907,6 +916,7 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       fprintf_P(&lcd_out, PSTR("Testing.....    ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("        -> Stop?"));
       lcdTextBlink(1, 11, 15);
+      // testing
       doTest(true);
       return 0;
     case CLOCK:
@@ -975,7 +985,6 @@ void lcdWarning() {
     case INFO_SUBSTRATE_DELIVERED:
       fprintf_P(&lcd_out, PSTR("Substrate was   ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("delivered! :))) "));
-      melody.beep(1);
       return;
     case WARNING_WATERING:
       fprintf_P(&lcd_out, PSTR("Watering...     ")); lcd.setCursor(0,1);
@@ -1121,8 +1130,8 @@ void buttonsShortClick(int _direction) {
       settings.tempSubsThreshold += _direction;
       return;
     case TEST:
-      storage.changed = false;
       menuEditMode = false;
+      storage.changed = false;
       doTest(false);
     case CLOCK:
       settingClock(_direction);
@@ -1171,6 +1180,8 @@ void buttonsLongPress() {
       menuEditMode, menuItem);
   #endif
   melody.beep(2);
+  // reset text blink state
+  lcdBlink = false;
   // action for simple Menu
   if(menuItem != HOME && menuEditMode == false) {
     // enter to Edit Menu and return edit field
