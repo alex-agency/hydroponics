@@ -192,10 +192,8 @@ void setup()
 
   // Configure buttons
   rightButton.attachClick( rightButtonClick );
-  rightButton.attachDoubleClick( rightButtonDoubleClick );
   rightButton.attachLongPressStart( buttonsLongPress );
   leftButton.attachClick( leftButtonClick );
-  leftButton.attachDoubleClick( leftButtonDoubleClick );
   leftButton.attachLongPressStart( buttonsLongPress );
 
   // "R2D2" melody
@@ -386,8 +384,9 @@ void check_levels() {
     return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
-  if(digitalRead(SUBSTRATE_FULLPIN) == 0) {
+  if(digitalRead(SUBSTRATE_FULLPIN) == 1) {
     states[WARNING] = INFO_SUBSTRATE_FULL;
+    /////// !!!!!!! ///////
     return;
   }
 }
@@ -492,31 +491,34 @@ void doCheck() {
 }
 
 void doTest(bool start) {
-  if(start == false) {
+  if(start == false && 
+      settings.lightThreshold == 3000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: disable.\n\r"));
     #endif    
     // restore previous settings
     settings = test;
-  }
-  if(settings.lightThreshold == 3000) {
-    misting_duration = 15;
+    doWork();
     return;
   }
-  #ifdef DEBUG
-    printf_P(PSTR("Test: Info: enable.\n\r"));
-  #endif
-  // save previous settings
-  test = settings;
-  // change settings for test
-  settings.lightThreshold = 3000;
-  settings.sunrise = states[DTIME];
-  settings.mistingDayPeriod = 1;
-  settings.mistingNightPeriod = 1;
-  settings.mistingSunrisePeriod = 1;
-  settings.wateringDayPeriod = 3;
-  settings.wateringNightPeriod = 3;
-  settings.wateringSunrisePeriod = 3;
+  if(start && settings.lightThreshold != 3000) {
+    #ifdef DEBUG
+      printf_P(PSTR("Test: Info: enable.\n\r"));
+    #endif
+    // save previous settings
+    test = settings;
+    // change settings for test
+    settings.lightThreshold = 3000;
+    settings.sunrise = states[DTIME];
+    settings.mistingDayPeriod = 1;
+    settings.mistingNightPeriod = 1;
+    settings.mistingSunrisePeriod = 1;
+    misting_duration = 15;
+    settings.wateringDayPeriod = 3;
+    settings.wateringNightPeriod = 3;
+    settings.wateringSunrisePeriod = 3;
+    doWork();  
+  }
 }
 
 void doWork() {
@@ -641,7 +643,7 @@ void watering() {
   }
   // emergency stop
   if(states[WARNING] == ERROR_NO_SUBSTRATE ||
-  	  start_watering +90 <= seconds()) {
+  	  start_watering +180 <= seconds()) {
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     start_watering = 0;
@@ -775,6 +777,8 @@ void lcdShowMenu(uint8_t _menuItem) {
       fprintf_P(&lcd_out, PSTR("Test all systems")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("       -> Start?"));
       lcdTextBlink(1, 10, 15);
+      storage.changed = false;
+      doTest(false);
       return;
     case 255:  
       menuItem = CLOCK;
@@ -903,12 +907,8 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
       fprintf_P(&lcd_out, PSTR("Testing.....    ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("        -> Stop?"));
       lcdTextBlink(1, 11, 15);
-      if(menuEditCursor == 1) {
-        doTest(true);
-      } else {
-        doTest(false);
-      }
-      return 1;
+      doTest(true);
+      return 0;
     case CLOCK:
       fprintf_P(&lcd_out, PSTR("Setting time    ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("%02d:%02d %02d-%02d-%4d"), 
@@ -1056,16 +1056,6 @@ void rightButtonClick() {
   buttonsShortClick(+1);
 }
 
-void leftButtonDoubleClick() {
-  buttonsShortClick(-1);
-  buttonsShortClick(-1);
-}
-
-void rightButtonDoubleClick() {
-  buttonsShortClick(+1);
-  buttonsShortClick(+1);
-}
-
 void buttonsShortClick(int _direction) {
   #ifdef DEBUG_LCD 
     printf_P(
@@ -1086,52 +1076,53 @@ void buttonsShortClick(int _direction) {
   // change settings
   switch (menuItem) {
     case WATERING_DAY:
-      settings.wateringDayPeriod =+ _direction;
+      settings.wateringDayPeriod += _direction;
       return;
     case WATERING_NIGHT:
-      settings.wateringNightPeriod =+ _direction;
+      settings.wateringNightPeriod += _direction;
       return;
     case WATERING_SUNRISE:
-      settings.wateringSunrisePeriod =+ _direction;
+      settings.wateringSunrisePeriod += _direction;
       return;
     case MISTING_DAY:
-      settings.mistingDayPeriod =+ _direction;
+      settings.mistingDayPeriod += _direction;
       return;
     case MISTING_NIGHT:
-      settings.mistingNightPeriod =+ _direction;
+      settings.mistingNightPeriod += _direction;
       return;
     case MISTING_SUNRISE:
-      settings.mistingSunrisePeriod =+ _direction;
+      settings.mistingSunrisePeriod += _direction;
       return;
     case DAY_TIME:
       if(menuEditCursor == 1)
-        settings.daytimeFrom =+ _direction;
+        settings.daytimeFrom += _direction;
       else
-        settings.daytimeTo =+ _direction;
+        settings.daytimeTo += _direction;
       return;
     case NIGHT_TIME:
       if(menuEditCursor == 1)
-        settings.nighttimeFrom =+ _direction;
+        settings.nighttimeFrom += _direction;
       else
-        settings.nighttimeTo =+ _direction;
+        settings.nighttimeTo += _direction;
       return;
     case LIGHT_THRESHOLD:
-      settings.lightThreshold =+ _direction;
+      settings.lightThreshold += _direction;
       return;
     case LIGHT_DAY:
-      settings.lightDayDuration =+ _direction;
+      settings.lightDayDuration += _direction;
       return;
     case HUMIDITY_THRESHOLD:
-      settings.humidThreshold =+ _direction;
+      settings.humidThreshold += _direction;
       return;
     case T_AIR_THRESHOLD:
-      settings.tempThreshold =+ _direction;
+      settings.tempThreshold += _direction;
       return;
     case T_SUBSTRATE_THRESHOLD:
-      settings.tempSubsThreshold =+ _direction;
+      settings.tempSubsThreshold += _direction;
       return;
     case TEST:
       storage.changed = false;
+      menuEditMode = false;
       doTest(false);
     case CLOCK:
       settingClock(_direction);
@@ -1152,22 +1143,22 @@ void settingClock(int _direction) {
   switch (menuEditCursor) {
     case 4:
       if(0 < RTC.hour && RTC.hour < 23)
-          RTC.hour =+ _direction;
+          RTC.hour += _direction;
       return;
     case 3:
       if(0 < RTC.minute && RTC.minute < 59)
-          RTC.minute =+ _direction;
+          RTC.minute += _direction;
       return;
     case 2:
       if(1 < RTC.day && RTC.day < 31)
-          RTC.day =+ _direction;
+          RTC.day += _direction;
       return;
     case 1:
       if(1 < RTC.month && RTC.month < 12)
-          RTC.month =+ _direction;
+          RTC.month += _direction;
       return;
     case 0:
-      RTC.year =+ _direction;
+      RTC.year += _direction;
       return;
     default:
       menuEditCursor = 0;
