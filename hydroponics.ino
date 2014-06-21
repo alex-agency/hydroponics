@@ -143,6 +143,7 @@ bool storage_ok;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t last_touch = 0;
+uint16_t last_light = 0;
 uint8_t misting_duration = 0;
 uint16_t start_watering = 0;
 bool menuEditMode;
@@ -150,7 +151,6 @@ uint8_t menuEditCursor;
 uint8_t menuItem;
 uint8_t menuHomeItem;
 bool lcdBlink;
-bool lcdBacklight = true;
 bool substrate_full;
 
 /****************************************************************************/
@@ -252,9 +252,9 @@ void loop()
       storage.changed = false;
     }
     // LCD sleeping after 5 min
-    if(lcdBacklight && last_touch + 5*60 < seconds()) {
+    if(last_touch + 5*60 < seconds()) {
       // switch off backlight
-      lcdBacklightToggle();
+      lcd.setBacklight(false);
     }
   }
   
@@ -488,7 +488,7 @@ void doCheck() {
   }
   // check humidity
   if(states[HUMIDITY] <= settings.humidThreshold) {
-    misting_duration = 3; // do for 3 sec
+    misting_duration = 5;
   }
   // reset warning
   states[WARNING] = NO_WARNING;
@@ -510,9 +510,10 @@ void doTest(bool start) {
     settings.wateringDayPeriod = 3;
     settings.wateringNightPeriod = 3;
     settings.wateringSunrisePeriod = 3;
-    misting_duration = 15;
     // manage test settings
     doWork();
+    // long misting after start only
+    misting_duration = 15;
     return;
   }
   if(start == false &&
@@ -523,8 +524,9 @@ void doTest(bool start) {
     // restore previous settings
     settings = test;
     // turn all off
-    start_misting = 0;
+    misting_duration = 0;
     relayOff(PUMP_WATERING);
+    start_watering = 0;
     relayOff(LAMP);
     return;
   }
@@ -544,7 +546,7 @@ void doWork() {
       start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
-      misting_duration = 3; // do for 3 sec
+      misting_duration = 5;
     }
     return;
   }
@@ -557,7 +559,7 @@ void doWork() {
       start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
-      misting_duration = 3; // do for 3 sec
+      misting_duration = 5;
     }
     return;
   }
@@ -569,7 +571,7 @@ void doWork() {
     start_watering = seconds();
   }
   if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
-    misting_duration = 3; // do for 3 sec
+    misting_duration = 5;
   }
 }
 
@@ -589,12 +591,12 @@ void doLight() {
       last_light = seconds();
       return;
     }
-    // watch for 30 minutes
-    if(RTC.hour <= 8 && RTC.hour > 3 && 
-        seconds() > last_light + 30*60) {
+    // watch for 15 minutes
+    if(RTC.hour <= 9 && RTC.hour > 4 && 
+        seconds() > last_light + 15*60) {
       last_light = seconds();
       // sunrise in minutes
-      settings.sunrise = states[DTIME]-30;
+      settings.sunrise = states[DTIME]-30; // less for 30 minute
   	  // mark for save to EEPROM
   	  storage.changed = true;
       #ifdef DEBUG
@@ -611,7 +613,7 @@ void doLight() {
   #endif
   // keep duration of light day
   uint16_t lampOn = settings.sunrise+(settings.lightDayDuration*60);
-  if(settings.sunrise > 0 && states[DTIME] <= lampOn) {
+  if(settings.sunrise <= states[DTIME] && states[DTIME] <= lampOn) {
     #ifdef DEBUG
       printf_P(PSTR("Light: Info: Lamp On till: %02d:%02d.\n\r"), 
         lampOn/60, lampOn%60);
@@ -693,17 +695,11 @@ uint16_t seconds() {
 }
 
 void lcdBacklightBlink(uint8_t _count) {
-  lcdBacklight = true;
   lcd.setBacklight(true);
   for(uint8_t i=0; i<_count; i++) {
-    lcdBacklightToggle(); delay(250);
-    lcdBacklightToggle(); delay(250);
+    lcd.setBacklight(false); delay(250);
+    lcd.setBacklight(true); delay(250);
   }
-}
-
-void lcdBacklightToggle() {
-  lcd.setBacklight(!lcdBacklight);
-  lcdBacklight = !lcdBacklight;
 }
 
 void lcdShowMenu(uint8_t _menuItem) {
@@ -975,12 +971,13 @@ void lcdWarning() {
     case WARNING_SUBSTRATE_LOW:
       fprintf_P(&lcd_out, PSTR("Low substrate!  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("Please add water"));
+      melody.beep(1);
       lcdTextBlink(1, 0, 15);
       return;
     case INFO_SUBSTRATE_FULL:
       fprintf_P(&lcd_out, PSTR("Substrate tank  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("is full! :)))   "));
-      melody.beep(1);
+      lcdBacklightBlink(1);
       return;
     case INFO_SUBSTRATE_DELIVERED:
       fprintf_P(&lcd_out, PSTR("Substrate was   ")); lcd.setCursor(0,1);
@@ -999,16 +996,19 @@ void lcdWarning() {
     case WARNING_AIR_COLD:
       fprintf_P(&lcd_out, PSTR("Air is too cold ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("for plants! :(  "));
+      melody.beep(1);
       lcdTextBlink(1, 12, 13);
       return;
     case WARNING_SUBSTRATE_COLD:
       fprintf_P(&lcd_out, PSTR("Substrate is too")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("cold! :(        "));
+      melody.beep(2);
       lcdTextBlink(1, 6, 7);
       return;
     case WARNING_NO_WATER:
       fprintf_P(&lcd_out, PSTR("Misting error!  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("No water! :(    "));
+      melody.beep(1);
       lcdTextBlink(1, 0, 12);
       return;
   }  
@@ -1152,19 +1152,23 @@ void settingClock(int _direction) {
   switch (menuEditCursor) {
     case 4:
       if(0 < RTC.hour && RTC.hour < 23)
-          RTC.hour += _direction;
+        RTC.hour += _direction;
+      else RTC.hour = 0 + _direction;
       return;
     case 3:
       if(0 < RTC.minute && RTC.minute < 59)
-          RTC.minute += _direction;
+        RTC.minute += _direction;
+      else RTC.minute = 0 + _direction;
       return;
     case 2:
       if(1 < RTC.day && RTC.day < 31)
-          RTC.day += _direction;
+        RTC.day += _direction;
+      else RTC.day = 1 + _direction;
       return;
     case 1:
       if(1 < RTC.month && RTC.month < 12)
-          RTC.month += _direction;
+        RTC.month += _direction;
+      else RTC.month = 1 + _direction;
       return;
     case 0:
       RTC.year += _direction;

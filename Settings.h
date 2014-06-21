@@ -107,7 +107,7 @@ class EEPROM
 
   private:
     uint8_t address_offset;
-    uint16_t writes_count = 0;
+    uint16_t writes_count;
 
     template <class T> void readBlock(uint16_t _address, const T& _value) {
        eeprom_read_block((void*)&_value, (const void*)_address, sizeof(_value));
