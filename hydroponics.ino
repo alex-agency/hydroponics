@@ -488,7 +488,7 @@ void doCheck() {
   }
   // check humidity
   if(states[HUMIDITY] <= settings.humidThreshold) {
-    misting_duration = 5;
+    misting_duration = 1;
   }
   // reset warning
   states[WARNING] = NO_WARNING;
@@ -546,7 +546,7 @@ void doWork() {
       start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingDayPeriod*60)) {
-      misting_duration = 5;
+      misting_duration = 2;
     }
     return;
   }
@@ -559,7 +559,7 @@ void doWork() {
       start_watering = seconds();
     }
     if(seconds() > last_misting + (settings.mistingNightPeriod*60)) {
-      misting_duration = 5;
+      misting_duration = 2;
     }
     return;
   }
@@ -571,7 +571,7 @@ void doWork() {
     start_watering = seconds();
   }
   if(seconds() > last_misting + (settings.mistingSunrisePeriod*60)) {
-    misting_duration = 5;
+    misting_duration = 3;
   }
 }
 
@@ -970,7 +970,7 @@ void lcdWarning() {
   switch (states[WARNING]) { 
     case WARNING_SUBSTRATE_LOW:
       fprintf_P(&lcd_out, PSTR("Low substrate!  ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("Please add water"));
+      fprintf_P(&lcd_out, PSTR("Please add some!"));
       melody.beep(1);
       lcdTextBlink(1, 0, 15);
       return;
@@ -1133,6 +1133,7 @@ void buttonsShortClick(int _direction) {
       menuEditMode = false;
       storage.changed = false;
       doTest(false);
+      return;
     case CLOCK:
       settingClock(_direction);
       // clock not used storage

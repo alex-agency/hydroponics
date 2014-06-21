@@ -19,7 +19,7 @@
 #define MAX_WRITES  20
 
 // Declare EEPROM values
-#define SETTINGS_ID "s8"
+#define SETTINGS_ID "s1"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDayPeriod, wateringNightPeriod, wateringSunrisePeriod;
@@ -35,7 +35,7 @@ struct SettingsStruct {
   11, 15,
   21, 05,
   200, 300, 14,
-  50, 15, 15,
+  45, 15, 15,
   SETTINGS_ID
 }, test;
 
