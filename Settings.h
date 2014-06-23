@@ -19,19 +19,21 @@
 #define MAX_WRITES  20
 
 // Declare EEPROM values
-#define SETTINGS_ID "s3"
+#define SETTINGS_ID "s4"
 // Declare structure and default settings
 struct SettingsStruct {
-  uint8_t wateringSunnyPeriod, wateringNightPeriod, wateringOtherPeriod;
-  uint8_t mistingSunnyPeriod, mistingNightPeriod, mistingOtherPeriod, mistingDuration;
+  uint8_t wateringDuration, wateringSunnyPeriod, wateringNightPeriod, wateringOtherPeriod;
+  uint8_t mistingDuration, mistingSunnyPeriod, mistingNightPeriod, mistingOtherPeriod;
   uint16_t lightMinimum, lightDayStart; uint8_t lightDayDuration;
-  uint8_t humidMinimum, airTempMinimum, subsTempMinimum;
+  uint8_t humidMinimum, humidMaximum, 
+  uint8_t airTempMinimum, airTempMaximum, subsTempMinimum;
   char id[3];
 } settings = {
-  45, 90, 60,
-  60, 90, 30, 2,
-  200, 300, 14,
-  45, 15, 15,
+  10, 90, 0, 180,
+  3, 120, 0, 60,
+  700, 300, 14,
+  50, 70,
+  18, 35, 16,
   SETTINGS_ID
 }, test;
 

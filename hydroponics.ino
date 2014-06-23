@@ -490,14 +490,14 @@ void doCheck() {
 }
 
 void doTest(bool start) { // TODO: check it
-  if(start && settings.lightMinimum != 5000) {
+  if(start && settings.lightMinimum != 10000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: enable.\n\r"));
     #endif
     // save previous settings
     test = settings;
     // change settings for test
-    settings.lightMinimum = 5000;
+    settings.lightMinimum = 10000;
     settings.lightDayDuration = 24;
     settings.mistingSunnyPeriod = 1;
     settings.mistingNightPeriod = 1;
@@ -512,7 +512,7 @@ void doTest(bool start) { // TODO: check it
     return;
   }
   if(start == false &&
-      settings.lightMinimum == 5000) {
+      settings.lightMinimum == 10000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: disable.\n\r"));
     #endif    
@@ -538,7 +538,7 @@ void doWork() {
     one_minute = 30;
   }
   // sunny time
-  if(11 <= RTC.hour && RTC.hour < 16 && states[LIGHT] >= 1000) {
+  if(11 <= RTC.hour && RTC.hour < 16 && states[LIGHT] >= 2500) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
@@ -600,14 +600,13 @@ void doLight() { //TODO: fix lightDayStart
     // watch for 15 minutes
     if(4 < RTC.hour && RTC.hour <= 8 && 
         seconds() >= light_enough + 15*60) {
+
       settings.lightDayStart = states[DTIME]-15; //minutes
   	  //storage.changed = true;
       return;
     }*/
     return;
   }
-  // reset watching
-  //light_enough = 0;
   // keep duration of light day
   uint16_t lampOn = settings.lightDayStart+(settings.lightDayDuration*60);
   if(settings.lightDayStart <= states[DTIME] && states[DTIME] <= lampOn) {
@@ -653,7 +652,7 @@ void watering() {
   }
   // emergency stop
   if(start_watering +180 <= seconds() ||
-      states[WARNING] == ERROR_NO_SUBSTRATE) {
+      states[ERROR] == ERROR_NO_SUBSTRATE) {
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     start_watering = 0;
