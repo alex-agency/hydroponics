@@ -33,7 +33,7 @@ struct SettingsStruct {
   3, 120, 0, 60,
   700, 300, 14,
   50, 70,
-  18, 35, 16,
+  17, 35, 15,
   SETTINGS_ID
 }, test;
 
