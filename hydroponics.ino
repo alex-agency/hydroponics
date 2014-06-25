@@ -65,7 +65,7 @@ struct comparator {
     return strcmp(str1, str2) == 0;
   }
 };
-SimpleMap<const char*, int, 15, comparator> states;
+SimpleMap<const char*, int, 12, comparator> states;
 
 // Declare push buttons
 OneButton rightButton(A2, true);
@@ -87,6 +87,7 @@ Melody melody(8);
 #define LAMP  "lamp"
 #define WARNING  "warning"
 #define ERROR  "error"
+#define SUNNY_TRESHOLD  2500 // lux
 
 // Declare warning states
 #define NO_WARNING  0
@@ -96,8 +97,9 @@ Melody melody(8);
 #define WARNING_WATERING  4
 #define WARNING_MISTING  5
 #define WARNING_AIR_COLD  6
-#define WARNING_SUBSTRATE_COLD  7
-#define WARNING_NO_WATER  8
+#define WARNING_AIR_HOT  7
+#define WARNING_SUBSTRATE_COLD  8
+#define WARNING_NO_WATER  9
 
 // Declare error states
 #define NO_ERROR  0
@@ -143,7 +145,7 @@ bool storage_ok;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t last_touch = 0;
-uint16_t light_enough = 0;
+uint16_t sunrise = 0;
 uint8_t misting_duration = 0;
 uint16_t start_watering = 0;
 bool menuEditMode;
@@ -255,6 +257,7 @@ void loop()
     if(last_touch + 5*60 < seconds()) {
       // switch off backlight
       lcd.setBacklight(false);
+      // TODO: save state for easy enable backlight
     }
   }
   // update push buttons
@@ -484,12 +487,14 @@ void doCheck() {
   if(states[AIR_TEMP] <= settings.airTempMinimum) {
     states[WARNING] = WARNING_AIR_COLD;
     return;
+  } else if(states[AIR_TEMP] >= settings.airTempMaximum) {
+    states[WARNING] = WARNING_AIR_HOT;
   }
   // reset warning
   states[WARNING] = NO_WARNING;
 }
 
-void doTest(bool start) { // TODO: check it
+void doTest(bool start) {
   if(start && settings.lightMinimum != 10000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: enable.\n\r"));
@@ -505,6 +510,7 @@ void doTest(bool start) { // TODO: check it
     settings.wateringSunnyPeriod = 3;
     settings.wateringNightPeriod = 3;
     settings.wateringOtherPeriod = 3;
+    settings.wateringDuration = 0;
     // manage test settings
     doWork();
     // long misting after start only
@@ -518,11 +524,10 @@ void doTest(bool start) { // TODO: check it
     #endif    
     // restore previous settings
     settings = test;
-    // turn all off
+    // turn off immediately
     misting_duration = 0;
-    relayOff(PUMP_WATERING);
     start_watering = 0;
-    relayOff(LAMP);
+    relayOff(PUMP_WATERING);
     return;
   }
 }
@@ -533,12 +538,15 @@ void doWork() {
     return;
   }
   uint8_t one_minute = 60;
-  // do watering and misting twice often
+  // check humidity
   if(states[HUMIDITY] <= settings.humidMinimum) {
-    one_minute = 30;
+    one_minute /= 2; // do work twice often
+  } else if(states[HUMIDITY] >= settings.humidMaximum) {
+    one_minute *= 2; // do work twice rarely
   }
   // sunny time
-  if(11 <= RTC.hour && RTC.hour < 16 && states[LIGHT] >= 2500) {
+  if(11 <= RTC.hour && RTC.hour < 16 && 
+      states[LIGHT] >= SUNNY_TRESHOLD) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
@@ -581,8 +589,8 @@ void doWork() {
     misting_duration = MISTING_DURATION;
   }
 }
-
-void doLight() { //TODO: fix lightDayStart 
+// TODO: Check recognising sunrise
+void doLight() { 
   // try to up temperature
   if(states[AIR_TEMP] <= settings.airTempMinimum) {
     // turn on lamp
@@ -593,31 +601,37 @@ void doLight() { //TODO: fix lightDayStart
   if(states[LIGHT] > settings.lightMinimum) {
     // turn off lamp
     relayOff(LAMP);
-    /*if(light_enough == 0) {
-      light_enough = seconds();
-      return;
+    
+    bool morning = 4 < RTC.hour && RTC.hour <= 8;
+    // save sunrise time
+    if(morning && sunrise == 0) {
+      sunrise = states[DTIME]; 
+    } else
+    // watch for 30 min to check
+    if(morning && sunrise+30 <= states[DTIME]) {
+      #ifdef DEBUG
+        printf_P(PSTR("Light: Info: Set new Day Start time: %02d:%02d.\n\r"), 
+        settings.lightDayStart/60, settings.lightDayStart%60);
+      #endif
+      settings.lightDayStart = sunrise;
+      // not necesary to save it every day to EEPROM
+      //storage.changed = true;
     }
-    // watch for 15 minutes
-    if(4 < RTC.hour && RTC.hour <= 8 && 
-        seconds() >= light_enough + 15*60) {
-
-      settings.lightDayStart = states[DTIME]-15; //minutes
-  	  //storage.changed = true;
-      return;
-    }*/
     return;
   }
-  // keep duration of light day
-  uint16_t lampOn = settings.lightDayStart+(settings.lightDayDuration*60);
-  if(settings.lightDayStart <= states[DTIME] && states[DTIME] <= lampOn) {
+  // keep light day
+  uint16_t lightDayEnd = settings.lightDayStart+(settings.lightDayDuration*60);
+  if(settings.lightDayStart <= states[DTIME] && states[DTIME] <= lightDayEnd) {
     #ifdef DEBUG
       printf_P(PSTR("Light: Info: Lamp On till: %02d:%02d.\n\r"), 
-        lampOn/60, lampOn%60);
+        lightDayEnd/60, lightDayEnd%60);
     #endif
     // turn on lamp
     relayOn(LAMP);
     return;
   }
+  // reset sunrise time
+  sunrise = 0;
   // turn off lamp
   relayOff(LAMP);
 }
@@ -650,17 +664,9 @@ void watering() {
   	  states[PUMP_WATERING] == false) {
     return;
   }
-  // emergency stop
-  if(start_watering +180 <= seconds() ||
-      states[ERROR] == ERROR_NO_SUBSTRATE) {
-    relayOff(PUMP_WATERING);
-    states[WARNING] = WARNING_SUBSTRATE_LOW;
-    start_watering = 0;
-    printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
-    return;
-  }
+  bool timeIsOver = start_watering + (settings.wateringDuration*60) <= seconds();
   // stop watering
-  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
+  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED && timeIsOver) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
     #endif
@@ -670,9 +676,16 @@ void watering() {
       states[WARNING] = NO_WARNING;
     return;
   }
-  // pause for clean pump for 15 sec
-  if(start_watering +15 <= seconds() &&
-      start_watering +15+15 > seconds()) {
+  // emergency stop
+  if(timeIsOver || states[ERROR] == ERROR_NO_SUBSTRATE) {
+    relayOff(PUMP_WATERING);
+    states[WARNING] = WARNING_SUBSTRATE_LOW;
+    start_watering = 0;
+    printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
+    return;
+  }
+  // 5 sec pause every 30 sec for cleanup pump
+  if((seconds()-start_watering) % 30 <= 5) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -680,7 +693,7 @@ void watering() {
     return;
   }
   #ifdef DEBUG
-    printf_P(PSTR("Misting: Info: Start or Resume watering.\n\r"));
+    printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
   states[WARNING] = WARNING_WATERING;
   last_watering = seconds();
@@ -710,6 +723,11 @@ void lcdShowMenu(uint8_t _menuItem) {
     case HOME:
       showHomeScreen();
       return;
+    case WATERING_DURATION:
+      fprintf_P(&lcd_out, PSTR("Watering durat. ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("for %2d min      "), 
+        settings.wateringDuration);
+      return;
     case WATERING_SUNNY:
       fprintf_P(&lcd_out, PSTR("Watering sunny  ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("every %3d min   "), 
@@ -721,9 +739,14 @@ void lcdShowMenu(uint8_t _menuItem) {
         settings.wateringNightPeriod);
       return;
     case WATERING_OTHER:
-      fprintf_P(&lcd_out, PSTR("Watering other  ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Watering evening")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("every %3d min   "), 
         settings.wateringOtherPeriod);
+      return;
+    case MISTING_DURATION:
+      fprintf_P(&lcd_out, PSTR("Misting duration")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("for %3d sec     "), 
+        settings.mistingDuration);
       return;
     case MISTING_SUNNY:
       fprintf_P(&lcd_out, PSTR("Misting sunny   ")); lcd.setCursor(0,1);
@@ -736,18 +759,13 @@ void lcdShowMenu(uint8_t _menuItem) {
         settings.mistingNightPeriod);
       return;
     case MISTING_OTHER:
-      fprintf_P(&lcd_out, PSTR("Misting other   ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("Misting evening ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("every %3d min   "), 
         settings.mistingOtherPeriod);
       return;
-    case MISTING_DURATION:
-      fprintf_P(&lcd_out, PSTR("Misting duration")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("for %3d sec     "), 
-        settings.mistingDuration);
-      return;
     case LIGHT_MINIMUM:
-      fprintf_P(&lcd_out, PSTR("Light threshold ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("lower %3d lux   "), 
+      fprintf_P(&lcd_out, PSTR("Light not less  ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("than %4d lux   "), 
         settings.lightMinimum);
       return;
     case LIGHT_DAY_DURATION:
@@ -767,10 +785,20 @@ void lcdShowMenu(uint8_t _menuItem) {
       fprintf_P(&lcd_out, PSTR("less than %2d%%   "), 
         settings.humidMinimum);
       return;
+    case HUMIDITY_MAXIMUM:
+      fprintf_P(&lcd_out, PSTR("Humidity not    ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("greater than %2d%%"), 
+        settings.humidMaximum);
+      return;
     case AIR_TEMP_MINIMUM:
       fprintf_P(&lcd_out, PSTR("Temp. air not   ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("less than %2d%c   "), 
         settings.airTempMinimum, celcium_c);
+      return;
+    case AIR_TEMP_MAXIMUM:
+      fprintf_P(&lcd_out, PSTR("Temp. air not   ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("greater than %2d%c"), 
+        settings.airTempMaximum, celcium_c);
       return;
     case SUBSTRATE_TEMP_MINIMUM:
       fprintf_P(&lcd_out, PSTR("Substrate temp. ")); lcd.setCursor(0,1);
@@ -987,6 +1015,12 @@ void lcdWarning() {
       return;
     case WARNING_AIR_COLD:
       fprintf_P(&lcd_out, PSTR("Air is too cold ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("for plants! :(  "));
+      melody.beep(1);
+      lcdTextBlink(1, 12, 13);
+      return;
+    case WARNING_AIR_HOT:
+      fprintf_P(&lcd_out, PSTR("Air is too hot ")); lcd.setCursor(0,1);
       fprintf_P(&lcd_out, PSTR("for plants! :(  "));
       melody.beep(1);
       lcdTextBlink(1, 12, 13);

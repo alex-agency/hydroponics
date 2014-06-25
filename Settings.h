@@ -29,10 +29,10 @@ struct SettingsStruct {
   uint8_t airTempMinimum, airTempMaximum, subsTempMinimum;
   char id[3];
 } settings = {
-  10, 90, 0, 180,
+  15, 90, 0, 120,
   3, 120, 0, 60,
   700, 300, 14,
-  50, 70,
+  50, 75,
   17, 35, 15,
   SETTINGS_ID
 }, test;
