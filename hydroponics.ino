@@ -18,7 +18,6 @@
 // debug console
 #define DEBUG
 //#define DEBUG_LCD
-//#define DEBUG_RTC
 
 // Declare LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -37,11 +36,13 @@ uint8_t lamp_char[8] = {14, 17, 17, 17, 14, 14, 4, 0};
 const uint8_t lamp_c = 5;
 
 // Declare output functions
-static int serial_putchar(char c, FILE *) {
-  Serial.write(c);
-  return 0;
-};
-FILE serial_out = {0};
+#ifdef DEBUG
+  static int serial_putchar(char c, FILE *) {
+    Serial.write(c);
+    return 0;
+  };
+  FILE serial_out = {0};
+#endif
 static int lcd_putchar(char c, FILE *) {
   lcd.write(c);
   return 0;
@@ -112,21 +113,24 @@ Melody melody(8);
 
 // Declare LCD menu items
 #define HOME  0
-#define WATERING_SUNNY  1
-#define WATERING_NIGHT  2
-#define WATERING_OTHER  3
-#define MISTING_SUNNY  4
-#define MISTING_NIGHT  5
-#define MISTING_OTHER  6
-#define MISTING_DURATION  7
-#define LIGHT_MINIMUM  8
-#define LIGHT_DAY_DURATION  9
-#define LIGHT_DAY_START  10
-#define HUMIDITY_MINIMUM  11
-#define AIR_TEMP_MINIMUM  12
-#define SUBSTRATE_TEMP_MINIMUM  13
-#define TEST 14
-#define CLOCK  15
+#define WATERING_DURATION  1
+#define WATERING_SUNNY  2
+#define WATERING_NIGHT  3
+#define WATERING_OTHER  4
+#define MISTING_DURATION  5
+#define MISTING_SUNNY  6
+#define MISTING_NIGHT  7
+#define MISTING_OTHER  8
+#define LIGHT_MINIMUM  9
+#define LIGHT_DAY_DURATION  10
+#define LIGHT_DAY_START  11
+#define HUMIDITY_MINIMUM  12
+#define HUMIDITY_MAXIMUM  13
+#define AIR_TEMP_MINIMUM  14
+#define AIR_TEMP_MAXIMUM  15
+#define SUBSTRATE_TEMP_MINIMUM  16
+#define TEST 17
+#define CLOCK  18
 
 // Declare pins
 #define DHT11PIN  3
@@ -163,11 +167,13 @@ bool substrate_full;
 void setup()
 {
   // Configure output
-  Serial.begin(9600);
-  fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
+  #ifdef DEBUG
+    Serial.begin(9600);
+    fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
+    stdout = stderr = &serial_out;
+  #endif
   fdev_setup_stream(&lcd_out, lcd_putchar, NULL, _FDEV_SETUP_WRITE);
-  stdout = stderr = &serial_out;
-
+ 
   // Configure lcd
   lcd.begin();
   // load custom characters
@@ -223,10 +229,12 @@ void loop()
       read_RTC();
     }
     // manage LCD
-    if(states[ERROR] != NO_ERROR)
+    if(states[ERROR] != NO_ERROR && 
+        last_touch+10 < seconds())
       lcdAlert();
     else
-    if(states[WARNING] != NO_WARNING)
+    if(states[WARNING] != NO_WARNING && 
+        last_touch+10 < seconds())
       lcdWarning();
     else
     if(menuItem != HOME && 
@@ -254,7 +262,9 @@ void loop()
       storage.changed = false;
     }
     // LCD sleeping after 5 min
-    if(last_touch + 5*60 < seconds()) {
+    if(last_touch + 5*60 < seconds() &&
+        states[WARNING] == NO_WARNING &&
+        states[ERROR] == NO_ERROR) {
       // switch off backlight
       lcd.setBacklight(false);
       // TODO: save state for easy enable backlight
@@ -313,7 +323,7 @@ bool read_DHT11() {
   if( DHT11.read(DHT11PIN) == DHTLIB_OK ) {
     states[HUMIDITY] = DHT11.humidity;
     states[AIR_TEMP] = DHT11.temperature;
-    #ifdef DEBUG
+    #ifdef DEBUG_DHT11
       printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
         states[HUMIDITY], states[AIR_TEMP]);
     #endif
@@ -334,7 +344,7 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
     return false;
   }
-  #ifdef DEBUG
+  #ifdef DEBUG_DS18B20
     printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
   #endif
   states[COMPUTER_TEMP] = value;
@@ -344,7 +354,7 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
     return false;
   }
-  #ifdef DEBUG
+  #ifdef DEBUG_DS18B20
     printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
   #endif
   states[SUBSTRATE_TEMP] = value;
@@ -360,7 +370,7 @@ bool read_BH1750() {
     printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
     return false;
   }
-  #ifdef DEBUG
+  #ifdef DEBUG_BH1750
     printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), value);
   #endif
   states[LIGHT] = value;
@@ -404,7 +414,7 @@ void relayOn(const char* relay) {
   }
   bool status = relays(relay, 0); // 0 is ON
   if(status) {
-    #ifdef DEBUG
+    #ifdef DEBUG_RELAY
       printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay);
     #endif
     states[relay] = true;
@@ -418,7 +428,7 @@ void relayOff(const char* relay) {
   }
   bool status = relays(relay, 1); // 1 is OFF
   if(status) {
-    #ifdef DEBUG
+    #ifdef DEBUG_RELAY
       printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay);
     #endif
     states[relay] = false;
@@ -502,19 +512,19 @@ void doTest(bool start) {
     // save previous settings
     test = settings;
     // change settings for test
-    settings.lightMinimum = 10000;
-    settings.lightDayDuration = 24;
-    settings.mistingSunnyPeriod = 1;
-    settings.mistingNightPeriod = 1;
-    settings.mistingOtherPeriod = 1;
-    settings.wateringSunnyPeriod = 3;
-    settings.wateringNightPeriod = 3;
-    settings.wateringOtherPeriod = 3;
-    settings.wateringDuration = 0;
+    settings.lightMinimum = 10000; //lux
+    settings.lightDayDuration = 18; //hours
+    settings.mistingSunnyPeriod = 1; //min
+    settings.mistingNightPeriod = 1; //min
+    settings.mistingOtherPeriod = 1; //min
+    settings.wateringSunnyPeriod = 3; //min
+    settings.wateringNightPeriod = 3; //min
+    settings.wateringOtherPeriod = 3; //min
+    settings.wateringDuration = 2; //min
     // manage test settings
     doWork();
     // long misting after start only
-    misting_duration = 10;
+    misting_duration = 10; //sec
     return;
   }
   if(start == false &&
@@ -550,14 +560,8 @@ void doWork() {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
-    if(seconds() > last_watering + 
-        (settings.wateringSunnyPeriod * one_minute)) {
-      start_watering = seconds();
-    }
-    if(seconds() > last_misting + 
-        (settings.mistingSunnyPeriod * one_minute)) {
-      misting_duration = MISTING_DURATION;
-    }
+    checkWateringPeriod(settings.wateringSunnyPeriod, one_minute);
+    checkMistingPeriod(settings.mistingSunnyPeriod, one_minute);
     return;
   }
   // night time 
@@ -566,30 +570,25 @@ void doWork() {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
-    if(seconds() > last_watering + 
-        (settings.wateringNightPeriod * one_minute)) {
-      start_watering = seconds();
-    }
-    if(seconds() > last_misting + 
-        (settings.mistingNightPeriod * one_minute)) {
-      misting_duration = MISTING_DURATION;
-    }
+    checkWateringPeriod(settings.wateringNightPeriod, one_minute);
+    checkMistingPeriod(settings.mistingNightPeriod, one_minute);
     return;
   }
-  #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Between sunny and night time.\n\r"));
-  #endif
-  // sunrise or sunset time
-  if(seconds() > last_watering + 
-      (settings.wateringSunnyPeriod * one_minute)) {
-    start_watering = seconds();
-  }
-  if(seconds() > last_misting + 
-      (settings.mistingSunnyPeriod * one_minute)) {
-    misting_duration = MISTING_DURATION;
-  }
+  // not sunny and not night time
+  checkWateringPeriod(settings.wateringOtherPeriod, one_minute);
+  checkMistingPeriod(settings.mistingOtherPeriod, one_minute);
 }
-// TODO: Check recognising sunrise
+
+void checkWateringPeriod(uint8_t _period, uint8_t _time) {
+  if(_period != 0 && seconds() > last_watering + (_period * _time))
+    start_watering = seconds();
+}
+
+void checkMistingPeriod(uint8_t _period, uint8_t _time) {
+  if(_period != 0 && seconds() > last_misting + (_period * _time))
+    misting_duration = MISTING_DURATION;
+}
+
 void doLight() { 
   // try to up temperature
   if(states[AIR_TEMP] <= settings.airTempMinimum) {
@@ -605,20 +604,24 @@ void doLight() {
     bool morning = 4 < RTC.hour && RTC.hour <= 8;
     // save sunrise time
     if(morning && sunrise == 0) {
-      sunrise = states[DTIME]; 
+      sunrise = states[DTIME];
     } else
     // watch for 30 min to check
     if(morning && sunrise+30 <= states[DTIME]) {
       #ifdef DEBUG
         printf_P(PSTR("Light: Info: Set new Day Start time: %02d:%02d.\n\r"), 
-        settings.lightDayStart/60, settings.lightDayStart%60);
+        sunrise/60, sunrise%60);
       #endif
       settings.lightDayStart = sunrise;
-      // not necesary to save it every day to EEPROM
+      // not necesary to write EEPROM every day
       //storage.changed = true;
+      // prevent rewrite, move to out of morning
+      sunrise += 300;
     }
     return;
   }
+  // reset sunrise time
+  sunrise = 0;
   // keep light day
   uint16_t lightDayEnd = settings.lightDayStart+(settings.lightDayDuration*60);
   if(settings.lightDayStart <= states[DTIME] && states[DTIME] <= lightDayEnd) {
@@ -630,12 +633,10 @@ void doLight() {
     relayOn(LAMP);
     return;
   }
-  // reset sunrise time
-  sunrise = 0;
   // turn off lamp
   relayOff(LAMP);
 }
-
+// TODO: fix 2 sec more than duration
 void misting() {
   if(misting_duration == 0 || 
       states[WARNING] == WARNING_NO_WATER) {
@@ -681,7 +682,9 @@ void watering() {
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     start_watering = 0;
-    printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
+    #endif
     return;
   }
   // 5 sec pause every 30 sec for cleanup pump
@@ -730,38 +733,32 @@ void lcdShowMenu(uint8_t _menuItem) {
       return;
     case WATERING_SUNNY:
       fprintf_P(&lcd_out, PSTR("Watering sunny  ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("every %3d min   "), 
-        settings.wateringSunnyPeriod);
+      lcdShowMenuPeriodRow(settings.wateringSunnyPeriod);
       return;
     case WATERING_NIGHT:
       fprintf_P(&lcd_out, PSTR("Watering night  ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("every %3d min   "), 
-        settings.wateringNightPeriod);
+      lcdShowMenuPeriodRow(settings.wateringNightPeriod);
       return;
     case WATERING_OTHER:
       fprintf_P(&lcd_out, PSTR("Watering evening")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("every %3d min   "), 
-        settings.wateringOtherPeriod);
+      lcdShowMenuPeriodRow(settings.wateringOtherPeriod);
       return;
     case MISTING_DURATION:
       fprintf_P(&lcd_out, PSTR("Misting duration")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("for %3d sec     "), 
+      fprintf_P(&lcd_out, PSTR("for %2d sec      "), 
         settings.mistingDuration);
       return;
     case MISTING_SUNNY:
       fprintf_P(&lcd_out, PSTR("Misting sunny   ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("every %3d min   "),
-        settings.mistingSunnyPeriod);
+      lcdShowMenuPeriodRow(settings.mistingSunnyPeriod);
       return;
     case MISTING_NIGHT:
       fprintf_P(&lcd_out, PSTR("Misting night   ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("every %3d min   "), 
-        settings.mistingNightPeriod);
+      lcdShowMenuPeriodRow(settings.mistingNightPeriod);
       return;
     case MISTING_OTHER:
       fprintf_P(&lcd_out, PSTR("Misting evening ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("every %3d min   "), 
-        settings.mistingOtherPeriod);
+      lcdShowMenuPeriodRow(settings.mistingOtherPeriod);
       return;
     case LIGHT_MINIMUM:
       fprintf_P(&lcd_out, PSTR("Light not less  ")); lcd.setCursor(0,1);
@@ -822,6 +819,14 @@ void lcdShowMenu(uint8_t _menuItem) {
     default:
       menuItem = HOME;
       menuHomeItem = 0;
+  }
+}
+
+void lcdShowMenuPeriodRow(uint8_t _period) {
+  if(_period != 0) {
+    fprintf_P(&lcd_out, PSTR("every %3d min   "), _period);
+  } else {
+    fprintf_P(&lcd_out, PSTR("is disable      "));
   }
 }
 
@@ -886,38 +891,44 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
 
   lcd.home();
   switch (menuItem) {
+    case WATERING_DURATION:
+      fprintf_P(&lcd_out, PSTR("Changing watering")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("duration %2d min  "), 
+        settings.wateringDuration);
+      lcdTextBlink(1, 9, 10);
+      return 0;
     case WATERING_SUNNY:
       return lcdEditMenuChangingPeriod(settings.wateringSunnyPeriod);
     case WATERING_NIGHT:
       return lcdEditMenuChangingPeriod(settings.wateringNightPeriod);  
     case WATERING_OTHER:
       return lcdEditMenuChangingPeriod(settings.wateringOtherPeriod);
+    case MISTING_DURATION:
+      fprintf_P(&lcd_out, PSTR("Changing misting")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("duration %2d sec "), 
+        settings.mistingDuration);
+      lcdTextBlink(1, 9, 10);
+      return 0;
     case MISTING_SUNNY:
       return lcdEditMenuChangingPeriod(settings.mistingSunnyPeriod);
     case MISTING_NIGHT:
       return lcdEditMenuChangingPeriod(settings.mistingNightPeriod);
     case MISTING_OTHER:
       return lcdEditMenuChangingPeriod(settings.mistingOtherPeriod);
-    case MISTING_DURATION:
-      fprintf_P(&lcd_out, PSTR("Changing misting")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("duration %2dh    "), 
-        settings.mistingDuration);
-      lcdTextBlink(1, 9, 10);
-      return 0;
     case LIGHT_MINIMUM:
-      fprintf_P(&lcd_out, PSTR("Changing light  ")); lcd.setCursor(0,1);
+      lcdEditMenuChengingLightRow();
       fprintf_P(&lcd_out, PSTR("minimum %3d lux "), 
         settings.lightMinimum);
       lcdTextBlink(1, 8, 10);
       return 0;
     case LIGHT_DAY_DURATION:
-      fprintf_P(&lcd_out, PSTR("Changing light  ")); lcd.setCursor(0,1);
+      lcdEditMenuChengingLightRow();
       fprintf_P(&lcd_out, PSTR("day duration %2dh"), 
         settings.lightDayDuration);
       lcdTextBlink(1, 13, 14);
       return 0;
     case LIGHT_DAY_START:
-      fprintf_P(&lcd_out, PSTR("Changing light  ")); lcd.setCursor(0,1);
+      lcdEditMenuChengingLightRow();
       fprintf_P(&lcd_out, PSTR("day start at %2dh"), 
         settings.lightDayStart/60);
       lcdTextBlink(1, 13, 14);
@@ -928,14 +939,26 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
         settings.humidMinimum);
       lcdTextBlink(1, 10, 11);
       return 0;
+    case HUMIDITY_MAXIMUM:
+      fprintf_P(&lcd_out, PSTR("Changing humid. ")); lcd.setCursor(0,1);
+      fprintf_P(&lcd_out, PSTR("greater than %2d%%"), 
+        settings.humidMaximum);
+      lcdTextBlink(1, 13, 14);
+      return 0;
     case AIR_TEMP_MINIMUM:
-      fprintf_P(&lcd_out, PSTR("Changing temp.  ")); lcd.setCursor(0,1);
+      lcdEditMenuChengingTempRow();
       fprintf_P(&lcd_out, PSTR("less than %2d%c   "), 
         settings.airTempMinimum, celcium_c);
       lcdTextBlink(1, 10, 11);
       return 0;
+    case AIR_TEMP_MAXIMUM:
+      lcdEditMenuChengingTempRow();
+      fprintf_P(&lcd_out, PSTR("greater than %2d%c"), 
+        settings.airTempMaximum, celcium_c);
+      lcdTextBlink(1, 13, 14);
+      return 0;
     case SUBSTRATE_TEMP_MINIMUM:
-      fprintf_P(&lcd_out, PSTR("Changing temp.  ")); lcd.setCursor(0,1);
+      lcdEditMenuChengingTempRow();
       fprintf_P(&lcd_out, PSTR("less than %2d%c   "), 
         settings.subsTempMinimum, celcium_c);
       lcdTextBlink(1, 10, 11);
@@ -975,16 +998,28 @@ uint8_t lcdEditMenu(uint8_t _menuItem, uint8_t _editCursor) {
 
 bool lcdEditMenuChangingPeriod(uint8_t _period) {
   fprintf_P(&lcd_out, PSTR("Changing period ")); lcd.setCursor(0,1);
-  fprintf_P(&lcd_out, PSTR("every %3d min.    "), _period);
-  lcdTextBlink(1, 6, 8);
+  if(_period != 0) {
+    fprintf_P(&lcd_out, PSTR("every %3d min.    "), _period);
+    lcdTextBlink(1, 6, 8);
+  } else {
+    fprintf_P(&lcd_out, PSTR("is disable      "));
+    lcdTextBlink(1, 3, 9);
+  }
   return 0;
+}
+
+void lcdEditMenuChengingTempRow() {
+  fprintf_P(&lcd_out, PSTR("Changing temp.  ")); lcd.setCursor(0,1);
+}
+
+void lcdEditMenuChengingLightRow() {
+  fprintf_P(&lcd_out, PSTR("Changing light  ")); lcd.setCursor(0,1);
 }
 
 void lcdWarning() {
   #ifdef DEBUG_LCD
     printf_P(PSTR("LCD: Info: Show Warning #%d.\n\r"), states[WARNING]);
   #endif
-  last_touch = seconds();
   lcd.setBacklight(true);
   
   lcd.home();
@@ -1045,7 +1080,6 @@ void lcdAlert() {
     printf_P(PSTR("LCD: Info: Show Alert #%d.\n\r"), states[ERROR]);
   #endif
   melody.beep(5);
-  last_touch = seconds();
   lcdBacklightBlink(1);
 
   lcd.home();
@@ -1110,6 +1144,9 @@ void buttonsShortClick(int _direction) {
   storage.changed = true;
   // change settings
   switch (menuItem) {
+    case WATERING_DURATION:
+      settings.wateringDuration += _direction;
+      return;    
     case WATERING_SUNNY:
       settings.wateringSunnyPeriod += _direction;
       return;
@@ -1119,6 +1156,9 @@ void buttonsShortClick(int _direction) {
     case WATERING_OTHER:
       settings.wateringOtherPeriod += _direction;
       return;
+    case MISTING_DURATION:
+      settings.mistingDuration += _direction;
+      return;
     case MISTING_SUNNY:
       settings.mistingSunnyPeriod += _direction;
       return;
@@ -1127,9 +1167,6 @@ void buttonsShortClick(int _direction) {
       return;
     case MISTING_OTHER:
       settings.mistingOtherPeriod += _direction;
-      return;
-    case MISTING_DURATION:
-      settings.mistingDuration += _direction;
       return;
     case LIGHT_MINIMUM:
       settings.lightMinimum += _direction;
@@ -1143,8 +1180,14 @@ void buttonsShortClick(int _direction) {
     case HUMIDITY_MINIMUM:
       settings.humidMinimum += _direction;
       return;
+    case HUMIDITY_MAXIMUM:
+      settings.humidMaximum += _direction;
+      return;
     case AIR_TEMP_MINIMUM:
       settings.airTempMinimum += _direction;
+      return;
+    case AIR_TEMP_MAXIMUM:
+      settings.airTempMaximum += _direction;
       return;
     case SUBSTRATE_TEMP_MINIMUM:
       settings.subsTempMinimum += _direction;

@@ -25,7 +25,7 @@ struct SettingsStruct {
   uint8_t wateringDuration, wateringSunnyPeriod, wateringNightPeriod, wateringOtherPeriod;
   uint8_t mistingDuration, mistingSunnyPeriod, mistingNightPeriod, mistingOtherPeriod;
   uint16_t lightMinimum, lightDayStart; uint8_t lightDayDuration;
-  uint8_t humidMinimum, humidMaximum, 
+  uint8_t humidMinimum, humidMaximum; 
   uint8_t airTempMinimum, airTempMaximum, subsTempMinimum;
   char id[3];
 } settings = {

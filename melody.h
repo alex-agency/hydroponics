@@ -103,8 +103,8 @@ private:
   void playNote( void ) {
     noTone(pin);
 		
-    int freq = notes[noteIndex] * 2;
-    int duration = tempo * beats[noteIndex];
+    uint16_t freq = notes[noteIndex] * 2;
+    uint16_t duration = tempo * beats[noteIndex];
 	
     #ifdef DEBUG
       printf_P(PSTR("MELODY: Info: Note #%d, freq: %d*2, duration: %d*%d.\n\r"),

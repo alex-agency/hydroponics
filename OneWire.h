@@ -36,13 +36,13 @@
 // old versions of OneWire).  If you disable this, a slower
 // but very compact algorithm is used.
 #ifndef ONEWIRE_CRC8_TABLE
-#define ONEWIRE_CRC8_TABLE 1
+#define ONEWIRE_CRC8_TABLE 0
 #endif
 
 // You can allow 16-bit CRC checks by defining this to 1
 // (Note that ONEWIRE_CRC must also be 1.)
 #ifndef ONEWIRE_CRC16
-#define ONEWIRE_CRC16 1
+#define ONEWIRE_CRC16 0
 #endif
 
 #define FALSE 0
