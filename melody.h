@@ -18,7 +18,7 @@
 #define BEEP  0
 const uint16_t beep1[]         = { N_A5, N_E5, N_REST };
 const uint8_t beep1_beats[]    = { 2, 	 2,    4 };
-const uint8_t beep1_tempo      = 30;
+const uint8_t beep1_tempo      = 25;
 // "R2D2" melody
 #define R2D2  1
 const uint16_t r2d2[]          = { N_A6, N_G6, N_E6, N_C6, N_D6, N_B6, N_F6, N_C7,

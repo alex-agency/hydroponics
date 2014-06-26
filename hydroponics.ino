@@ -157,6 +157,7 @@ uint8_t menuEditCursor;
 uint8_t menuItem;
 uint8_t menuHomeItem;
 bool lcdBlink;
+bool lcdBacklight;
 bool substrate_full;
 
 /****************************************************************************/
@@ -262,12 +263,9 @@ void loop()
       storage.changed = false;
     }
     // LCD sleeping after 5 min
-    if(last_touch + 5*60 < seconds() &&
-        states[WARNING] == NO_WARNING &&
-        states[ERROR] == NO_ERROR) {
+    if(lcd.isBacklight() && last_touch + 5*60 < seconds()) {
       // switch off backlight
       lcd.setBacklight(false);
-      // TODO: save state for easy enable backlight
     }
   }
   // update push buttons
@@ -586,7 +584,7 @@ void checkWateringPeriod(uint8_t _period, uint8_t _time) {
 
 void checkMistingPeriod(uint8_t _period, uint8_t _time) {
   if(_period != 0 && seconds() > last_misting + (_period * _time))
-    misting_duration = MISTING_DURATION;
+    misting_duration = settings.mistingDuration;
 }
 
 void doLight() { 
@@ -612,9 +610,12 @@ void doLight() {
         printf_P(PSTR("Light: Info: Set new Day Start time: %02d:%02d.\n\r"), 
         sunrise/60, sunrise%60);
       #endif
+      // save to EEPROM if big difference
+      if(sunrise-30 > settings.lightDayStart || 
+          sunrise+30 < settings.lightDayStart) {
+        storage.changed = true;
+      }
       settings.lightDayStart = sunrise;
-      // not necesary to write EEPROM every day
-      //storage.changed = true;
       // prevent rewrite, move to out of morning
       sunrise += 300;
     }
@@ -636,7 +637,7 @@ void doLight() {
   // turn off lamp
   relayOff(LAMP);
 }
-// TODO: fix 2 sec more than duration
+
 void misting() {
   if(misting_duration == 0 || 
       states[WARNING] == WARNING_NO_WATER) {
@@ -1133,7 +1134,10 @@ void buttonsShortClick(int _direction) {
   #endif
   melody.beep(1);
   last_touch = seconds();
-  lcd.setBacklight(true);
+  if(lcd.isBacklight() == false) {
+    lcd.setBacklight(true);
+    return;
+  }
   // action for simple Menu
   if(menuEditMode == false) {
     // move forward to next menu
