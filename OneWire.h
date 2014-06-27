@@ -36,13 +36,13 @@
 // old versions of OneWire).  If you disable this, a slower
 // but very compact algorithm is used.
 #ifndef ONEWIRE_CRC8_TABLE
-#define ONEWIRE_CRC8_TABLE 0
+#define ONEWIRE_CRC8_TABLE 1
 #endif
 
 // You can allow 16-bit CRC checks by defining this to 1
 // (Note that ONEWIRE_CRC must also be 1.)
 #ifndef ONEWIRE_CRC16
-#define ONEWIRE_CRC16 0
+#define ONEWIRE_CRC16 1
 #endif
 
 #define FALSE 0
@@ -129,7 +129,16 @@ class OneWire
     // Perform a 1-Wire reset cycle. Returns 1 if a device responds
     // with a presence pulse.  Returns 0 if there is no device or the
     // bus is shorted or otherwise held low for more than 250uS
+	// You can differentiate between these two conditions using busTest(). 
+	// If busTest() returns 0, then the bus appeared to function correctly, but
+	// but there just were not any devices present.
     uint8_t reset(void);
+	
+	// Only valid after a call to reset() that returned 0. 
+	// Returns 1 if the bus did not float to
+	// high after reset. Could indicate a short from bus to 
+	// ground, or pull-up resistor too small for attached network
+	uint8_t busFail(void);
 
     // Issue a 1-Wire rom select command, you do the reset first.
     void select(const uint8_t rom[8]);

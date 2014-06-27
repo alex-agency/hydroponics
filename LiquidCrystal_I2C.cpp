@@ -247,7 +247,7 @@ void LiquidCrystal_I2C::setBacklight(uint8_t new_val){
 	}
 }
 
-bool isBacklight(){
+bool LiquidCrystal_I2C::isBacklight(){
 	return _backlight;
 }
 

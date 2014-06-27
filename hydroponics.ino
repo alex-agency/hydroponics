@@ -10,8 +10,7 @@
 #include "OneButton.h"
 #include "DS1307new.h"
 #include "DHT11.h"
-#include "OneWire.h"
-#include "DallasTemperature.h"
+#include "DS18B20.h"
 #include "BH1750.h"
 #include "Melody.h"
 
@@ -332,13 +331,10 @@ bool read_DHT11() {
 }
 
 bool read_DS18B20() {
-  OneWire oneWire(ONE_WIRE_BUS);
-  DallasTemperature dallas(&oneWire);
-  dallas.begin();
-  dallas.requestTemperatures();
-
-  int value = dallas.getTempCByIndex(0);
-  if(value == DEVICE_DISCONNECTED_C) {
+  DS18B20 ds(ONE_WIRE_BUS);
+  
+  int value = ds.read(0);
+  if(value == DS_DISCONNECTED) {
     printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
     return false;
   }
@@ -346,9 +342,9 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
   #endif
   states[COMPUTER_TEMP] = value;
-  
-  value = dallas.getTempCByIndex(1);
-  if(value == DEVICE_DISCONNECTED_C) {
+
+  value = ds.read(1);
+  if(value == DS_DISCONNECTED) {
     printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
     return false;
   }
@@ -1112,7 +1108,7 @@ void lcdAlert() {
       return;
     case ERROR_NO_SUBSTRATE:
       fprintf_P(&lcd_out, PSTR("No substrate!   ")); lcd.setCursor(0,1);
-      fprintf_P(&lcd_out, PSTR("Plants can die!"));
+      fprintf_P(&lcd_out, PSTR("Plants can die! "));
       lcdTextBlink(1, 0, 14);
       return;
   }  
