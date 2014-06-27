@@ -375,8 +375,8 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    states[ERROR] = ERROR_NO_SUBSTRATE;
-    return;
+    //states[ERROR] = ERROR_NO_SUBSTRATE;
+    //return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
@@ -386,8 +386,8 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
   if(analogRead(WATER_LEVELPIN) > 700) {
-    states[WARNING] = WARNING_NO_WATER;
-    return;
+    //states[WARNING] = WARNING_NO_WATER;
+    //return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_FULLPIN) == 1) { 	  
