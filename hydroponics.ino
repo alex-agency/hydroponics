@@ -205,7 +205,9 @@ void setup()
   leftButton.attachLongPressStart( buttonsLongPress );
 
   // "R2D2" melody
-  melody.play(R2D2); 
+  melody.play(R2D2);
+  // touch init
+  last_touch = seconds();
 }
 
 //
@@ -238,7 +240,7 @@ void loop()
       lcdWarning();
     else
     if(menuItem != HOME && 
-        last_touch+60 < seconds() &&
+        last_touch+30 < seconds() &&
         menuItem != TEST)
       lcdShowMenu(HOME);
     else
@@ -262,7 +264,8 @@ void loop()
       storage.changed = false;
     }
     // LCD sleeping after 5 min
-    if(lcd.isBacklight() && last_touch + 5*60 < seconds()) {
+    if(states[WARNING] == NO_WARNING &&
+        lcd.isBacklight() && last_touch + 5*60 < seconds()) {
       // switch off backlight
       lcd.setBacklight(false);
     }
@@ -684,8 +687,12 @@ void watering() {
     #endif
     return;
   }
-  // 5 sec pause every 30 sec for cleanup pump
-  if((seconds()-start_watering) % 30 <= 5) {
+  // set pause for cleanup pump and rest
+  uint8_t pauseDuration = 5;
+  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
+    pauseDuration = 10;
+  // pause every 30 sec
+  if((seconds()-start_watering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
