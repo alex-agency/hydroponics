@@ -491,7 +491,8 @@ void doCheck() {
     return;
   }
   // check air temperature
-  if(states[AIR_TEMP] <= settings.airTempMinimum) {
+  if(states[AIR_TEMP] <= settings.airTempMinimum && 
+      RTC.hour >= 7 {
     states[WARNING] = WARNING_AIR_COLD;
     return;
   } else if(states[AIR_TEMP] >= settings.airTempMaximum) {
@@ -588,7 +589,8 @@ void checkMistingPeriod(uint8_t _period, uint8_t _time) {
 
 void doLight() { 
   // try to up temperature
-  if(states[AIR_TEMP] <= settings.airTempMinimum) {
+  if(states[AIR_TEMP] <= settings.airTempMinimum &&
+      states[LIGHT] > 100) {
     // turn on lamp
     relayOn(LAMP);
     return;
