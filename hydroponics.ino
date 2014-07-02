@@ -15,7 +15,7 @@
 #include "Melody.h"
 
 // debug console
-#define DEBUG
+//#define DEBUG
 //#define DEBUG_LCD
 
 // Declare LCD
@@ -492,7 +492,7 @@ void doCheck() {
   }
   // check air temperature
   if(states[AIR_TEMP] <= settings.airTempMinimum && 
-      RTC.hour >= 7 {
+      RTC.hour >= 7) {
     states[WARNING] = WARNING_AIR_COLD;
     return;
   } else if(states[AIR_TEMP] >= settings.airTempMaximum) {
