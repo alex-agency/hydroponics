@@ -13,6 +13,12 @@
 #include "DS18B20.h"
 #include "BH1750.h"
 #include "Melody.h"
+#include "MeshNet.h"
+#include <SPI.h>
+#include "nRF24L01.h"
+#include "RF24.h"
+#include "printf.h"
+#include "RF24Layer2.h"
 
 // debug console
 //#define DEBUG
@@ -55,6 +61,36 @@ FILE lcd_out = {0};
 #define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
 #endif
 
+// DEVICE TYPE
+const uint32_t deviceType = 001;
+// DEVICE UNIQUE ID
+uint32_t deviceUniqueId = 100002;
+/** LAYER 2 DEPENDENT CODE **/
+// Declare SPI bus pins
+#define CE_PIN  9
+#define CS_PIN  10
+// Set up nRF24L01 radio
+RF24 radio(CE_PIN, CS_PIN);
+const uint8_t RF24_INTERFACE = 0;
+// The number of network interfaces that this device has
+const int NUM_INTERFACES = 1;
+// Pass a layer3 packet to the layer2
+int sendPacket(unsigned char* message, uint8_t len, uint8_t interface, uint8_t macAddress)
+{  
+    // Here should be called the layer2 function corresponding to interface
+    if(interface == RF24_INTERFACE){
+      rf24sendPacket(message, len, macAddress);
+      return 1;
+    }
+    return 0;
+}
+void onCommandReceived(uint8_t command, void* data, uint8_t dataLen)
+{
+  #ifdef DEBUG
+    printf_P(PSTR("onCommandReceived: %d, %d\n\r"), command, data);
+  #endif
+}
+
 // Declare delay managers
 timer_t fast_timer(1000);
 timer_t slow_timer(60000);
@@ -75,6 +111,7 @@ OneButton leftButton(A3, true);
 Melody melody(8);
 
 // Declare constants
+#define NAME  "hydroponics"
 #define CDN  "cdn" // days after 2000-01-01
 #define DTIME  "dtime" // minutes after 00:00
 #define HUMIDITY  "humidity" // air humidity
@@ -208,6 +245,9 @@ void setup()
   melody.play(R2D2);
   // touch init
   last_touch = seconds();
+
+  // initialize radio
+  rf24init();
 }
 
 //
@@ -269,12 +309,26 @@ void loop()
       // switch off backlight
       lcd.setBacklight(false);
     }
+    // send data to base
+    sendCommand(1, (void*) &states[NAME], sizeof(states[NAME]));
+    sendCommand(2, (void*) &states[HUMIDITY], sizeof(states[HUMIDITY]));
+    sendCommand(3, (void*) &states[AIR_TEMP], sizeof(states[AIR_TEMP]));
+    sendCommand(4, (void*) &states[COMPUTER_TEMP], sizeof(states[COMPUTER_TEMP]));
+    sendCommand(5, (void*) &states[SUBSTRATE_TEMP], sizeof(states[SUBSTRATE_TEMP]));
+    sendCommand(6, (void*) &states[LIGHT], sizeof(states[LIGHT]));
+    sendCommand(7, (void*) &states[PUMP_MISTING], sizeof(states[PUMP_MISTING]));
+    sendCommand(8, (void*) &states[PUMP_WATERING], sizeof(states[PUMP_WATERING]));
+    sendCommand(9, (void*) &states[LAMP], sizeof(states[LAMP]));
+    sendCommand(10, (void*) &states[WARNING], sizeof(states[WARNING]));
+    sendCommand(11, (void*) &states[ERROR], sizeof(states[ERROR]));
   }
   // update push buttons
   leftButton.tick();
   rightButton.tick();
   // update melody
   melody.update();
+  // update network
+  rf24receive();
 }
 
 /****************************************************************************/
