@@ -4,22 +4,14 @@
 
 #include <avr/eeprom.h>
 
-//#define DEBUG
+//#define DEBUG_EEPROM
 
-// Avoid spurious warnings
-#if ! defined( NATIVE ) && defined( ARDUINO )
-#undef PROGMEM
-#define PROGMEM __attribute__(( section(".progmem.data") ))
-#undef PSTR
-#define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
-#endif
-
-#define EEPROM_SIZE  256 
+static const uint8_t EEPROM_SIZE = 255;
 //#define EEPROM_OFFSET
-#define MAX_WRITES  20
-
+// prevent burn memory
+static const uint8_t MAX_WRITES = 20;
 // Declare EEPROM values
-#define SETTINGS_ID "r1"
+#define SETTINGS_ID  "a"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDuration, wateringSunnyPeriod, wateringNightPeriod, wateringOtherPeriod;
@@ -27,7 +19,7 @@ struct SettingsStruct {
   uint16_t lightMinimum, lightDayStart; uint8_t lightDayDuration;
   uint8_t humidMinimum, humidMaximum; 
   uint8_t airTempMinimum, airTempMaximum, subsTempMinimum;
-  char id[3];
+  char id[2];
 } settings = {
   15, 90, 0, 120,
   3, 120, 0, 60,
@@ -53,25 +45,31 @@ class EEPROM
         if (strcmp(memory.id, SETTINGS_ID) == 0) {
           // load settings
           settings = memory;
-          #ifdef DEBUG
+          #ifdef DEBUG_EEPROM
             printf_P(PSTR("EEPROM: Info: Settings loaded from address: %d.\n\r"),
             address_offset);
           #endif
           return true;
-	}
+	      }
         address_offset++;
-      } 
-      printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
-      // initial default settings to EEPROM
-      address_offset = 0; changed = true; save();
+      }
+      #ifdef DEBUG_EEPROM
+        printf_P(PSTR("EEPROM: Error: Can't load settings!\n\r"));
+      #endif
+      // load default settings to EEPROM
+      address_offset = 0; 
+      changed = true; 
+      save();
       return false;
     }
 
     bool save() {
       // prevent to burn EEPROM
       if(writes_count >= MAX_WRITES) {
-        printf_P(PSTR("EEPROM: Error: Reached limit %d writes!\n\r"), 
-          MAX_WRITES);
+        #ifdef DEBUG_EEPROM
+          printf_P(PSTR("EEPROM: Error: Reached limit %d writes!\n\r"), 
+            MAX_WRITES);
+        #endif
         return false;
       }
       // move on store position
@@ -79,12 +77,14 @@ class EEPROM
         address_offset++;
       #endif
       // if writing at offset would mean going outside the EEPROM limit
-      if(address_offset > (EEPROM_SIZE-sizeof(settings))) 
+      if(address_offset > (EEPROM_SIZE-sizeof(settings))) {
         address_offset = 0;
-      
+      }
       uint8_t updateCount = 0;
       if(changed) {
-        printf_P(PSTR("EEPROM: Warning: Write to EEPROM! Do this not so often!\n\r"));
+        #ifdef DEBUG_EEPROM
+          printf_P(PSTR("EEPROM: Warning: Write to EEPROM! Do this not so often!\n\r"));
+        #endif
         updateCount = updateBlock(address_offset, settings);
         changed = false;
       } else {
@@ -92,7 +92,7 @@ class EEPROM
       }
 
       if(updateCount == sizeof(settings)) {
-        #ifdef DEBUG
+        #ifdef DEBUG_EEPROM
           printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
             address_offset);
         #endif
@@ -116,7 +116,7 @@ class EEPROM
       const uint8_t* bytePointer = (const uint8_t*)(void*)&_value;
       for(uint8_t i = 0; i < sizeof(_value); i++) {
         if (eeprom_read_byte((uint8_t*)_address) != *bytePointer) {
-          #ifdef DEBUG
+          #ifdef DEBUG_EEPROM
             printf_P(PSTR("writing: %d\n\r"), *bytePointer);
           #endif
           //do the actual EEPROM writing
@@ -129,9 +129,8 @@ class EEPROM
         bytePointer++;
       }
       writes_count += writeCount;
-      printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), 
-        writeCount);
-      #ifdef DEBUG
+      #ifdef DEBUG_EEPROM
+        printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), writeCount);
         printf_P(PSTR("EEPROM: Info: %d bytes not changed!\n\r"), skipCount);
       #endif
       return writeCount + skipCount;
