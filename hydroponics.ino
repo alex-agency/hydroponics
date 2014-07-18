@@ -4,12 +4,10 @@
 #include "LcdPanel.h"
 #include "MemoryFree.h"
 #include "Watchdog.h"
-#include "Settings.h"
 #include "RTClib.h"
 #include "DHT.h"
 #include "DS18B20.h"
 #include "BH1750.h"
-#include "Melody.h"
 #include "nRF24L01.h"
 #include "RF24.h"
 #include "RF24Layer2.h"
@@ -48,9 +46,6 @@ struct timer_t {
 timer_t fast_timer(1); // sec
 timer_t slow_timer(60); // sec
 
-// Set up Speaker digital pin
-Melody melody(8);
-
 // DHT sensor
 #define DHTTYPE DHT11
 
@@ -71,25 +66,6 @@ static const uint8_t LAMP = 9;
 static const uint8_t WARNING = 10;
 static const uint8_t ERROR = 11;
 static const uint16_t SUNNY_TRESHOLD = 2500; // lux
-// Declare warning states
-static const uint8_t NO_WARNING = 0;
-static const uint8_t INFO_SUBSTRATE_FULL = 1;
-static const uint8_t WARNING_SUBSTRATE_LOW = 2;
-static const uint8_t INFO_SUBSTRATE_DELIVERED = 3;
-static const uint8_t WARNING_WATERING = 4;
-static const uint8_t WARNING_MISTING = 5;
-static const uint8_t WARNING_AIR_COLD = 6;
-static const uint8_t WARNING_AIR_HOT = 7;
-static const uint8_t WARNING_SUBSTRATE_COLD = 8;
-static const uint8_t WARNING_NO_WATER = 9;
-// Declare error states
-static const uint8_t NO_ERROR = 0;
-static const uint8_t ERROR_LOW_MEMORY = 10;
-static const uint8_t ERROR_EEPROM = 11;
-static const uint8_t ERROR_DHT = 12;
-static const uint8_t ERROR_BH1750 = 13;
-static const uint8_t ERROR_DS18B20 = 14;
-static const uint8_t ERROR_NO_SUBSTRATE = 15;
 // Declare pins
 static const uint8_t DHTPIN = 3;
 static const uint8_t ONE_WIRE_BUS = 2;
@@ -102,8 +78,6 @@ static const uint8_t PUMP_MISTINGPIN = 5;
 static const uint8_t LAMPPIN = 7;
 
 // Declare variables
-EEPROM storage;
-bool storage_ok;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t sunrise = 0;
@@ -129,12 +103,6 @@ void setup()
   softResetMem(512);
   // restart after freezing for 8 sec
   softResetTimeout();
-
-  // Load settings
-  storage_ok = storage.load();
-
-  // "R2D2" melody
-  melody.play(R2D2);
 
   // initialize network
   rf24init();
@@ -221,11 +189,6 @@ void loop()
     sendCommand(10, (void*) &states[WARNING], sizeof(states[WARNING]));
     sendCommand(11, (void*) &states[ERROR], sizeof(states[ERROR]));*/
   }
-  // update push buttons
-  leftButton.tick();
-  rightButton.tick();
-  // update melody
-  melody.update();
   // update network
   rf24receive();
 }
@@ -643,86 +606,6 @@ void watering() {
   rtc.writenvram(WARNING, WARNING_WATERING);
   last_watering = millis()/1000;
   relayOn(PUMP_WATERING);
-}
-
-void lcdWarning() {
-  lcd.setBacklight(true);
-  
-  lcd.home();
-  switch (rtc.readnvram(WARNING)) { 
-    case WARNING_SUBSTRATE_LOW:
-      fprintf_P(&lcd_out, PSTR("Low substrate!  \nPlease add some!"));
-      melody.beep(1);
-      panel.textBlink(1, 0, 15);
-      return;
-    case INFO_SUBSTRATE_FULL:
-      fprintf_P(&lcd_out, PSTR("Substrate tank  \nis full! :)))   "));
-      lcdBacklightBlink(1);
-      return;
-    case INFO_SUBSTRATE_DELIVERED:
-      fprintf_P(&lcd_out, PSTR("Substrate was   \ndelivered! :))) "));
-      return;
-    case WARNING_WATERING:
-      fprintf_P(&lcd_out, PSTR("Watering...     \nPlease wait.    "));
-      panel.textBlink(1, 0, 11);
-      return;
-    case WARNING_MISTING:
-      fprintf_P(&lcd_out, PSTR("Misting...      \nPlease wait.    "));
-      return;
-    case WARNING_AIR_COLD:
-      fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! :(  "));
-      melody.beep(1);
-      panel.textBlink(1, 12, 13);
-      return;
-    case WARNING_AIR_HOT:
-      fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! :(  "));
-      melody.beep(1);
-      panel.textBlink(1, 12, 13);
-      return;
-    case WARNING_SUBSTRATE_COLD:
-      fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! :(        "));
-      melody.beep(2);
-      panel.textBlink(1, 6, 7);
-      return;
-    case WARNING_NO_WATER:
-      fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! :(    "));
-      melody.beep(1);
-      panel.textBlink(1, 0, 12);
-      return;
-  }  
-}
-
-void lcdAlert() {
-  melody.beep(5);
-  lcdBacklightBlink(1);
-
-  lcd.home();
-  switch (rtc.readnvram(ERROR)) {
-    case ERROR_LOW_MEMORY:
-      fprintf_P(&lcd_out, PSTR("MEMORY ERROR!   \nLow memory!     "));
-      panel.textBlink(1, 0, 10);
-      return;
-    case ERROR_EEPROM:
-      fprintf_P(&lcd_out, PSTR("EEPROM ERROR!   \nSettings reset! "));
-      panel.textBlink(1, 0, 14);
-      return;
-    case ERROR_DHT:
-      fprintf_P(&lcd_out, PSTR("DHT ERROR!      \nCheck connection"));
-      panel.textBlink(1, 0, 15);
-      return;
-    case ERROR_BH1750:
-      fprintf_P(&lcd_out, PSTR("BH1750 ERROR!   \nCheck connection"));
-      panel.textBlink(1, 0, 15);
-      return;
-    case ERROR_DS18B20:
-      fprintf_P(&lcd_out, PSTR("DS18B20 ERROR!  \nCheck connection"));
-      panel.textBlink(1, 0, 15);
-      return;
-    case ERROR_NO_SUBSTRATE:
-      fprintf_P(&lcd_out, PSTR("No substrate!   \nPlants can die! "));
-      panel.textBlink(1, 0, 14);
-      return;
-  }  
 }
 
 void settingClock(int _direction) {

@@ -4,6 +4,8 @@
 
 #include "LiquidCrystal_I2C.h"
 #include "OneButton.h"
+#include "Settings.h"
+#include "Melody.h"
 
 // Declare LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -34,6 +36,12 @@ FILE lcd_out = {0};
 OneButton rightButton(A2, true);
 OneButton leftButton(A3, true);
 
+// Declare Speaker digital pin
+Melody melody(8);
+
+// Declare 
+EEPROM storage;
+
 // Declare LCD menu items
 static const uint8_t HOME = 0;
 static const uint8_t WATERING_DURATION = 1;
@@ -54,17 +62,34 @@ static const uint8_t AIR_TEMP_MAXIMUM = 15;
 static const uint8_t SUBSTRATE_TEMP_MINIMUM = 16;
 static const uint8_t TEST = 17;
 static const uint8_t CLOCK = 18;
+// Declare warning states
+static const uint8_t NO_WARNING = 0;
+static const uint8_t INFO_SUBSTRATE_FULL = 1;
+static const uint8_t WARNING_SUBSTRATE_LOW = 2;
+static const uint8_t INFO_SUBSTRATE_DELIVERED = 3;
+static const uint8_t WARNING_WATERING = 4;
+static const uint8_t WARNING_MISTING = 5;
+static const uint8_t WARNING_AIR_COLD = 6;
+static const uint8_t WARNING_AIR_HOT = 7;
+static const uint8_t WARNING_SUBSTRATE_COLD = 8;
+static const uint8_t WARNING_NO_WATER = 9;
+// Declare error states
+static const uint8_t NO_ERROR = 0;
+static const uint8_t ERROR_LOW_MEMORY = 10;
+static const uint8_t ERROR_EEPROM = 11;
+static const uint8_t ERROR_DHT = 12;
+static const uint8_t ERROR_BH1750 = 13;
+static const uint8_t ERROR_DS18B20 = 14;
+static const uint8_t ERROR_NO_SUBSTRATE = 15;
 
 class LcdPanel 
 {
 public:
-  uint16_t last_touch;
-  bool menuEdit;
-  uint8_t menuEditCursor;
+  uint16_t lastTouch;
+  uint8_t editMode;
   uint8_t menuItem;
-  uint8_t menuHomeItem;
-  bool lcdBlink;
-  bool lcdBacklight;
+  uint8_t homeScreenItem;
+  bool storage_ok;
 
   void begin() {
     // Configure output
@@ -79,20 +104,29 @@ public:
     lcd.createChar(CHAR_FLOWER, char_flower);
     lcd.createChar(CHAR_LAMP, char_lamp);
 
-    // Configure buttons
-    rightButton.attachClick( rightButtonClick );
-    rightButton.attachLongPressStart( buttonsLongPress );
-    leftButton.attachClick( leftButtonClick );
-    leftButton.attachLongPressStart( buttonsLongPress );
-
     // touch init
-    last_touch = millis()/1000;
+    lastTouch = millis()/1000;
+
+    // Load settings
+    storage_ok = storage.load();
+
+    // "R2D2" melody
+    melody.play(R2D2);
   }
 
   void update() {
+    
+    // update push buttons
+    leftButton.tick();
+    rightButton.tick();
+    // update melody
+    melody.update();
+  }
+
+  void lcdUpdate() {
     // is it come after button click?
     if(editValue != 0) {
-      //melody.beep(1);
+      melody.beep(1);
       last_touch = millis()/1000;
       if(lcd.isBacklight() == false) {
         lcd.setBacklight(true);
@@ -101,17 +135,17 @@ public:
       // action for simple Menu
       if(editMode == false) {
         // move forward to next menu
-        lcdMenu(menuItem + editValue, false);
+        menuItem += editValue;
         return;
       }
       // mark settings for save
-      //storage.changed = true;
+      storage.changed = true;
     }
 
     lcd.home();
     switch (menuItem) {
       case HOME:
-        showHomeScreen();
+        homeScreen();
         break;
       case WATERING_DURATION:
         fprintf_P(&lcd_out, PSTR("Watering durat. \nfor %2d min      "), 
@@ -122,13 +156,13 @@ public:
         }
         break;
       case WATERING_SUNNY:
-        lcdMenuPeriod(PSTR("Watering sunny  "), &settings.wateringSunnyPeriod);
+        menuPeriod(PSTR("Watering sunny  "), &settings.wateringSunnyPeriod);
         break;
       case WATERING_NIGHT:
-        lcdMenuPeriod(PSTR("Watering night  "), &settings.wateringNightPeriod);
+        menuPeriod(PSTR("Watering night  "), &settings.wateringNightPeriod);
         break;
       case WATERING_OTHER:
-        lcdMenuPeriod(PSTR("Watering evening"), &settings.wateringOtherPeriod);
+        menuPeriod(PSTR("Watering evening"), &settings.wateringOtherPeriod);
         break;
       case MISTING_DURATION:
         fprintf_P(&lcd_out, PSTR("Misting duration\nfor %2d sec      "), 
@@ -139,13 +173,13 @@ public:
         }
         break;
       case MISTING_SUNNY:
-        lcdMenuPeriod(PSTR("Misting sunny   "), &settings.mistingSunnyPeriod);
+        menuPeriod(PSTR("Misting sunny   "), &settings.mistingSunnyPeriod);
         break;
       case MISTING_NIGHT:
-        lcdMenuPeriod(PSTR("Misting night   "), &settings.mistingNightPeriod);
+        menuPeriod(PSTR("Misting night   "), &settings.mistingNightPeriod);
         break;
       case MISTING_OTHER:
-        lcdMenuPeriod(PSTR("Misting evening "), &settings.mistingOtherPeriod);
+        menuPeriod(PSTR("Misting evening "), &settings.mistingOtherPeriod);
         break;
       case LIGHT_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Light not less  \nthan %4d lux   "), 
@@ -228,22 +262,22 @@ public:
         panel.textBlink(1, 10, 15);
         if(editValue != 0) {
           editMode = false;
-          storage.changed = false;
-          doTest(false);
+          //storage.changed = false;
+          //doTest(false);
         }
         break;
       case 255: 
         menuItem = CLOCK;
       case CLOCK:
         if(editMode == false) {
-          fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d\nDate: %02d-%02d-%4d"), 
-            clock.hour(), clock.minute(), clock.second(), 
-            clock.day(), clock.month(), clock.year());
+          //fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d\nDate: %02d-%02d-%4d"), 
+          //  clock.hour(), clock.minute(), clock.second(), 
+          //  clock.day(), clock.month(), clock.year());
         } else 
         if(editValue != 0) {
-          settingClock(editValue);
+          //settingClock(editValue);
           // clock not used storage
-          storage.changed = false;
+          //storage.changed = false;
         } 
         else {
           fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d"), 
@@ -263,14 +297,15 @@ public:
             panel.textBlink(1, 12, 15);       
           }
         }
-        return 4;
+        editModeCursor = 4;
+        break;
       default:
         menuItem = HOME;
         menuHomeItem = 0;
         break;
     }
     editValue = 0;
-    return 0;
+    return;
   }
 
   void textBlink(bool _row, uint8_t _start, uint8_t _end) { 
@@ -294,6 +329,8 @@ public:
 
 private:
   int editValue;
+  bool lcdBlink;
+  bool lcdBacklight;
 
   void homeScreen() {
     fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d:%02d"), 
@@ -339,6 +376,86 @@ private:
     }
   }
 
+  void lcdWarning() {
+    lcd.setBacklight(true);
+    
+    lcd.home();
+    switch (rtc.readnvram(WARNING)) { 
+      case WARNING_SUBSTRATE_LOW:
+        fprintf_P(&lcd_out, PSTR("Low substrate!  \nPlease add some!"));
+        melody.beep(1);
+        panel.textBlink(1, 0, 15);
+        return;
+      case INFO_SUBSTRATE_FULL:
+        fprintf_P(&lcd_out, PSTR("Substrate tank  \nis full! :)))   "));
+        lcdBacklightBlink(1);
+        return;
+      case INFO_SUBSTRATE_DELIVERED:
+        fprintf_P(&lcd_out, PSTR("Substrate was   \ndelivered! :))) "));
+        return;
+      case WARNING_WATERING:
+        fprintf_P(&lcd_out, PSTR("Watering...     \nPlease wait.    "));
+        panel.textBlink(1, 0, 11);
+        return;
+      case WARNING_MISTING:
+        fprintf_P(&lcd_out, PSTR("Misting...      \nPlease wait.    "));
+        return;
+      case WARNING_AIR_COLD:
+        fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! :(  "));
+        melody.beep(1);
+        panel.textBlink(1, 12, 13);
+        return;
+      case WARNING_AIR_HOT:
+        fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! :(  "));
+        melody.beep(1);
+        panel.textBlink(1, 12, 13);
+        return;
+      case WARNING_SUBSTRATE_COLD:
+        fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! :(        "));
+        melody.beep(2);
+        panel.textBlink(1, 6, 7);
+        return;
+      case WARNING_NO_WATER:
+        fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! :(    "));
+        melody.beep(1);
+        panel.textBlink(1, 0, 12);
+        return;
+    }  
+  }
+
+  void lcdAlert() {
+    melody.beep(5);
+    lcdBacklightBlink(1);
+
+    lcd.home();
+    switch (rtc.readnvram(ERROR)) {
+      case ERROR_LOW_MEMORY:
+        fprintf_P(&lcd_out, PSTR("MEMORY ERROR!   \nLow memory!     "));
+        panel.textBlink(1, 0, 10);
+        return;
+      case ERROR_EEPROM:
+        fprintf_P(&lcd_out, PSTR("EEPROM ERROR!   \nSettings reset! "));
+        panel.textBlink(1, 0, 14);
+        return;
+      case ERROR_DHT:
+        fprintf_P(&lcd_out, PSTR("DHT ERROR!      \nCheck connection"));
+        panel.textBlink(1, 0, 15);
+        return;
+      case ERROR_BH1750:
+        fprintf_P(&lcd_out, PSTR("BH1750 ERROR!   \nCheck connection"));
+        panel.textBlink(1, 0, 15);
+        return;
+      case ERROR_DS18B20:
+        fprintf_P(&lcd_out, PSTR("DS18B20 ERROR!  \nCheck connection"));
+        panel.textBlink(1, 0, 15);
+        return;
+      case ERROR_NO_SUBSTRATE:
+        fprintf_P(&lcd_out, PSTR("No substrate!   \nPlants can die! "));
+        panel.textBlink(1, 0, 14);
+        return;
+    }  
+  }
+
   void leftButtonClick() {
     editValue = -1;
   }
@@ -348,24 +465,21 @@ private:
   }
 
   void buttonsLongPress() {
-    #ifdef DEBUG_LCD 
-      printf_P(PSTR("Button: Info: Long press: Edit mode: %d, Menu: %d.\n\r"),
-        menuEditMode, menuItem);
-    #endif
     melody.beep(2);
     // reset text blink state
     lcdBlink = false;
     // action for simple Menu
     if(menuItem != HOME && menuEdit == false) {
       // enter to Edit Menu and return edit field
-      menuEditCursor = lcdMenu(menuItem, true);
+      menuEditMode = true;
+      panel.update();
       return;
     }
     // action for Edit menu
     if(menuEdit && menuEditCursor > 0) {
       // move to next edit field
       menuEditCursor--;
-      lcdMenu(menuItem, true);
+      panel.update();
       return;
     }
     // save changed time
@@ -373,9 +487,15 @@ private:
       rtc.adjust(clock);
     }
     // close Edit menu
-    lcdMenu(menuItem, true);
+    panel.update();
   }
 
 } panel;
+
+// Configure buttons
+rightButton.attachClick( panel.rightButtonClick );
+rightButton.attachLongPressStart( panel.buttonsLongPress );
+leftButton.attachClick( panel.leftButtonClick );
+leftButton.attachLongPressStart( panel.buttonsLongPress );
 
 #endif // __LCDPANEL_H__
