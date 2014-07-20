@@ -27,6 +27,24 @@ uint8_t char_lamp[8] = {14, 17, 17, 17, 14, 14, 4, 0};
 static int lcd_putchar(char c, FILE *) {
   if(c == '\n')
     lcd.setCursor(0,1);
+  if(c == '[') {
+    lcdBlink = true;
+    return 0;
+  }
+  if(c == ']') {
+    lcdBlink = false;
+    return 0;
+  }
+  if(lcdBlink) {
+    lcd.write(' ');
+    return 0;
+  }
+
+
+
+
+
+
   lcd.write(c);
   return 0;
 };
@@ -86,10 +104,10 @@ class LcdPanel
 {
 public:
   uint16_t lastTouch;
+  uint16_t lastUpdate;
   uint8_t editMode;
   uint8_t menuItem;
   uint8_t homeScreenItem;
-  bool storage_ok;
 
   void begin() {
     // Configure output
@@ -103,19 +121,22 @@ public:
     lcd.createChar(CHAR_TEMP, char_temp);
     lcd.createChar(CHAR_FLOWER, char_flower);
     lcd.createChar(CHAR_LAMP, char_lamp);
-
-    // touch init
+    // init values
     lastTouch = millis()/1000;
-
+    lastUpdate = lastTouch;
+    editMode, menuItem, homeScreenItem = 0;
     // Load settings
-    storage_ok = storage.load();
-
+    storage.load();
     // "R2D2" melody
     melody.play(R2D2);
   }
 
   void update() {
-    
+    // timer fo 1 sec
+    if((millis()/1000) - lastUpdate >= 1) {
+      lastUpdate = millis()/1000;
+      lcdUpdate();
+    }
     // update push buttons
     leftButton.tick();
     rightButton.tick();
@@ -124,22 +145,19 @@ public:
   }
 
   void lcdUpdate() {
-    // is it come after button click?
-    if(editValue != 0) {
+    // is it come after buttons click?
+    if(direction != 0) {
       melody.beep(1);
       last_touch = millis()/1000;
+      // enable backlight
       if(lcd.isBacklight() == false) {
         lcd.setBacklight(true);
         return;
       }
-      // action for simple Menu
-      if(editMode == false) {
+      if(editMode == 0) {
         // move forward to next menu
-        menuItem += editValue;
-        return;
+        menuItem += direction;
       }
-      // mark settings for save
-      storage.changed = true;
     }
 
     lcd.home();
@@ -150,9 +168,9 @@ public:
       case WATERING_DURATION:
         fprintf_P(&lcd_out, PSTR("Watering durat. \nfor %2d min      "), 
           settings.wateringDuration);
-        if(editMode) {
+        if(editMode > 0) {
           panel.textBlink(1, 4, 5);
-          settings.wateringDuration += editValue;
+          settings.wateringDuration += direction;
         }
         break;
       case WATERING_SUNNY:
@@ -169,7 +187,7 @@ public:
           settings.mistingDuration);
         if(editMode) {
           panel.textBlink(1, 4, 5);
-          settings.mistingDuration += editValue;
+          settings.mistingDuration += direction;
         }
         break;
       case MISTING_SUNNY:
@@ -186,7 +204,7 @@ public:
           settings.lightMinimum);
         if(editMode) {
           panel.textBlink(1, 5, 8);
-          settings.lightMinimum += editValue;
+          settings.lightMinimum += direction;
         }
         break;
       case LIGHT_DAY_DURATION:
@@ -194,7 +212,7 @@ public:
           settings.lightDayDuration);
         if(editMode) {
           panel.textBlink(1, 9, 10);
-          settings.lightDayDuration += editValue;
+          settings.lightDayDuration += direction;
         }
         break;
       case LIGHT_DAY_START:
@@ -208,7 +226,7 @@ public:
           fprintf_P(&lcd_out, PSTR("day start at %2dh"), 
             settings.lightDayStart/60);
           panel.textBlink(1, 13, 14);
-          settings.lightDayStart += editValue;
+          settings.lightDayStart += direction;
         }
         break;
       case HUMIDITY_MINIMUM:
@@ -216,7 +234,7 @@ public:
           settings.humidMinimum);
         if(editMode) {
           panel.textBlink(1, 10, 11);
-          settings.humidMinimum += editValue;
+          settings.humidMinimum += direction;
         }
         break;
       case HUMIDITY_MAXIMUM:
@@ -224,7 +242,7 @@ public:
           settings.humidMaximum);
         if(editMode) {
           panel.textBlink(1, 13, 14);
-          settings.humidMaximum += editValue;
+          settings.humidMaximum += direction;
         }
         break;
       case AIR_TEMP_MINIMUM:
@@ -232,7 +250,7 @@ public:
           settings.airTempMinimum, char_celcium);
         if(editMode) {
           panel.textBlink(1, 10, 11);
-          settings.airTempMinimum += editValue;
+          settings.airTempMinimum += direction;
         }
         break;
       case AIR_TEMP_MAXIMUM:
@@ -240,7 +258,7 @@ public:
           settings.airTempMaximum, char_celcium);
         if(editMode) {
           panel.textBlink(1, 13, 14);
-          settings.airTempMaximum += editValue;
+          settings.airTempMaximum += direction;
         }
         break;
       case SUBSTRATE_TEMP_MINIMUM:
@@ -248,7 +266,7 @@ public:
           settings.subsTempMinimum, char_celcium);
         if(editMode) {
           panel.textBlink(1, 10, 11);
-          settings.subsTempMinimum += editValue;
+          settings.subsTempMinimum += direction;
         }
         break;
       case TEST:
@@ -260,7 +278,7 @@ public:
           doTest(true);
         }
         panel.textBlink(1, 10, 15);
-        if(editValue != 0) {
+        if(direction != 0) {
           editMode = false;
           //storage.changed = false;
           //doTest(false);
@@ -274,8 +292,8 @@ public:
           //  clock.hour(), clock.minute(), clock.second(), 
           //  clock.day(), clock.month(), clock.year());
         } else 
-        if(editValue != 0) {
-          //settingClock(editValue);
+        if(direction != 0) {
+          //settingClock(direction);
           // clock not used storage
           //storage.changed = false;
         } 
@@ -304,7 +322,7 @@ public:
         menuHomeItem = 0;
         break;
     }
-    editValue = 0;
+    direction = 0;
     return;
   }
 
@@ -328,7 +346,7 @@ public:
   }
 
 private:
-  int editValue;
+  int direction;
   bool lcdBlink;
   bool lcdBacklight;
 
@@ -344,7 +362,8 @@ private:
     switch (menuHomeItem) {
       case 0:
         fprintf_P(&lcd_out, PSTR("Air: %c %2d%c %c %2d%%"),
-          char_temp, rtc.readnvram(AIR_TEMP), char_celcium, char_humidity, rtc.readnvram(HUMIDITY));
+          char_temp, rtc.readnvram(AIR_TEMP), char_celcium, char_humidity, 
+          rtc.readnvram(HUMIDITY));
         break;
       case 4:
         fprintf_P(&lcd_out, PSTR("Substrate: %c %2d%c"),
@@ -457,11 +476,13 @@ private:
   }
 
   void leftButtonClick() {
-    editValue = -1;
+    direction = -1;
+    panel.lcdUpdate();
   }
 
   void rightButtonClick() {
-    editValue = 1;
+    direction = 1;
+    panel.lcdUpdate();
   }
 
   void buttonsLongPress() {

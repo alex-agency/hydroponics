@@ -34,6 +34,7 @@ class EEPROM
 {
   public:
     bool changed;
+    bool ok;
 
     bool load() {
       address_offset = 0;
@@ -49,6 +50,7 @@ class EEPROM
             printf_P(PSTR("EEPROM: Info: Settings loaded from address: %d.\n\r"),
             address_offset);
           #endif
+          ok = trut;
           return true;
 	      }
         address_offset++;
@@ -60,6 +62,7 @@ class EEPROM
       address_offset = 0; 
       changed = true; 
       save();
+      ok = false;
       return false;
     }
 
@@ -70,6 +73,7 @@ class EEPROM
           printf_P(PSTR("EEPROM: Error: Reached limit %d writes!\n\r"), 
             MAX_WRITES);
         #endif
+        ok = false;
         return false;
       }
       // move on store position
@@ -88,6 +92,7 @@ class EEPROM
         updateCount = updateBlock(address_offset, settings);
         changed = false;
       } else {
+        ok = true;
         return true;
       }
 
@@ -96,10 +101,14 @@ class EEPROM
           printf_P(PSTR("EEPROM: Info: Saved settings at address: %d.\n\r"),
             address_offset);
         #endif
+        ok = true;
         return true;
       }
-      printf_P(PSTR("EEPROM: Error: Settings isn't saved at %d address!\n\r"), 
-        address_offset);
+      #ifdef DEBUG_EEPROM
+        printf_P(PSTR("EEPROM: Error: Settings isn't saved at %d address!\n\r"), 
+          address_offset);
+      #endif
+      ok = false;
       return false;
     }
 
