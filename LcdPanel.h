@@ -1,4 +1,3 @@
-
 #ifndef LCDPANEL_H
 #define LCDPANEL_H
 
@@ -24,28 +23,28 @@ static const uint8_t CHAR_LAMP = 5;
 uint8_t char_lamp[8] = {14, 17, 17, 17, 14, 14, 4, 0};
 
 // Declare output
+static bool charErase = false;
+static bool textErase = false;
+static bool textBlink = false;
 static int lcd_putchar(char c, FILE *) {
-  if(c == '\n')
-    lcd.setCursor(0,1);
-  if(c == '[') {
-    lcdBlink = true;
-    return 0;
+  switch(c) {
+    case '\n':
+      lcd.setCursor(0,1);
+      break;
+    case '{':
+      if(textErase)
+        charErase = true;
+      break;
+    case '}':
+      charErase = false;
+      textErase = !textErase;
+      break;
+    default:
+      if(textBlink && charErase)
+        lcd.write(' ');
+      else
+        lcd.write(c);
   }
-  if(c == ']') {
-    lcdBlink = false;
-    return 0;
-  }
-  if(lcdBlink) {
-    lcd.write(' ');
-    return 0;
-  }
-
-
-
-
-
-
-  lcd.write(c);
   return 0;
 };
 FILE lcd_out = {0};
@@ -103,11 +102,8 @@ static const uint8_t ERROR_NO_SUBSTRATE = 15;
 class LcdPanel 
 {
 public:
-  uint16_t lastTouch;
-  uint16_t lastUpdate;
   uint8_t editMode;
   uint8_t menuItem;
-  uint8_t homeScreenItem;
 
   void begin() {
     // Configure output
@@ -145,7 +141,6 @@ public:
   }
 
   void lcdUpdate() {
-    // is it come after buttons click?
     if(direction != 0) {
       melody.beep(1);
       last_touch = millis()/1000;
@@ -154,140 +149,111 @@ public:
         lcd.setBacklight(true);
         return;
       }
-      if(editMode == 0) {
-        // move forward to next menu
-        menuItem += direction;
-      }
     }
-
+    if(editMode == 0) {
+      // move forward to next menu
+      menuItem += direction;
+      // don't settings values
+      direction = 0;
+      textBlink = false;
+    } else {
+      // enable blink
+      textBlink = true;
+    }
+    // print menu
     lcd.home();
     switch (menuItem) {
       case HOME:
         homeScreen();
         break;
       case WATERING_DURATION:
-        fprintf_P(&lcd_out, PSTR("Watering durat. \nfor %2d min      "), 
-          settings.wateringDuration);
-        if(editMode > 0) {
-          panel.textBlink(1, 4, 5);
-          settings.wateringDuration += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Watering durat. \nfor {%2d} min      "), 
+          settings.wateringDuration += direction);
         break;
       case WATERING_SUNNY:
-        menuPeriod(PSTR("Watering sunny  "), &settings.wateringSunnyPeriod);
+        menuPeriod(PSTR("Watering sunny  \n"), 
+          &settings.wateringSunnyPeriod += direction);
         break;
       case WATERING_NIGHT:
-        menuPeriod(PSTR("Watering night  "), &settings.wateringNightPeriod);
+        menuPeriod(PSTR("Watering night  \n"), 
+          &settings.wateringNightPeriod += direction);
         break;
       case WATERING_OTHER:
-        menuPeriod(PSTR("Watering evening"), &settings.wateringOtherPeriod);
+        menuPeriod(PSTR("Watering evening\n"), 
+          &settings.wateringOtherPeriod += direction);
         break;
       case MISTING_DURATION:
-        fprintf_P(&lcd_out, PSTR("Misting duration\nfor %2d sec      "), 
-          settings.mistingDuration);
-        if(editMode) {
-          panel.textBlink(1, 4, 5);
-          settings.mistingDuration += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Misting duration\nfor {%2d} sec      "), 
+          settings.mistingDuration += direction);
         break;
       case MISTING_SUNNY:
-        menuPeriod(PSTR("Misting sunny   "), &settings.mistingSunnyPeriod);
+        menuPeriod(PSTR("Misting sunny   \n"),
+          &settings.mistingSunnyPeriod += direction);
         break;
       case MISTING_NIGHT:
-        menuPeriod(PSTR("Misting night   "), &settings.mistingNightPeriod);
+        menuPeriod(PSTR("Misting night   \n"), 
+          &settings.mistingNightPeriod += direction);
         break;
       case MISTING_OTHER:
-        menuPeriod(PSTR("Misting evening "), &settings.mistingOtherPeriod);
+        menuPeriod(PSTR("Misting evening \n"), 
+          &settings.mistingOtherPeriod += direction);
         break;
       case LIGHT_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Light not less  \nthan %4d lux   "), 
-          settings.lightMinimum);
-        if(editMode) {
-          panel.textBlink(1, 5, 8);
-          settings.lightMinimum += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Light not less  \nthan {%4d} lux   "), 
+          settings.lightMinimum += direction);
         break;
       case LIGHT_DAY_DURATION:
-        fprintf_P(&lcd_out, PSTR("Light day       \nduration %2dh    "), 
-          settings.lightDayDuration);
-        if(editMode) {
-          panel.textBlink(1, 9, 10);
-          settings.lightDayDuration += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Light day       \nduration {%2d}h    "), 
+          settings.lightDayDuration += direction);
         break;
       case LIGHT_DAY_START:
         fprintf_P(&lcd_out, PSTR("Light day from  \n"));
-        if(editMode == false) {
+        if(editMode == 0) {
           fprintf_P(&lcd_out, PSTR("%02d:%02d to %02d:%02d  "), 
             settings.lightDayStart/60, settings.lightDayStart%60,
             (settings.lightDayStart/60)+settings.lightDayDuration, 
             settings.lightDayStart%60);
         } else {
-          fprintf_P(&lcd_out, PSTR("day start at %2dh"), 
-            settings.lightDayStart/60);
-          panel.textBlink(1, 13, 14);
-          settings.lightDayStart += direction;
+          fprintf_P(&lcd_out, PSTR("day start at {%2d}h"), 
+            (settings.lightDayStart += direction)/60);
         }
         break;
       case HUMIDITY_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Humidity not    \nless than %2d%%   "), 
-          settings.humidMinimum);
-        if(editMode) {
-          panel.textBlink(1, 10, 11);
-          settings.humidMinimum += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Humidity not    \nless than {%2d}%%   "), 
+          settings.humidMinimum += direction);
         break;
       case HUMIDITY_MAXIMUM:
-        fprintf_P(&lcd_out, PSTR("Humidity not    \ngreater than %2d%%"), 
-          settings.humidMaximum);
-        if(editMode) {
-          panel.textBlink(1, 13, 14);
-          settings.humidMaximum += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Humidity not    \ngreater than {%2d}%%"), 
+          settings.humidMaximum += direction);
         break;
       case AIR_TEMP_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Temp. air not   \nless than %2d%c   "), 
-          settings.airTempMinimum, char_celcium);
-        if(editMode) {
-          panel.textBlink(1, 10, 11);
-          settings.airTempMinimum += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Temp. air not   \nless than {%2d}%c   "), 
+          settings.airTempMinimum += direction, char_celcium);
         break;
       case AIR_TEMP_MAXIMUM:
-        fprintf_P(&lcd_out, PSTR("Temp. air not   \ngreater than %2d%c"), 
-          settings.airTempMaximum, char_celcium);
-        if(editMode) {
-          panel.textBlink(1, 13, 14);
-          settings.airTempMaximum += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Temp. air not   \ngreater than {%2d}%c"), 
+          settings.airTempMaximum += direction, char_celcium);
         break;
       case SUBSTRATE_TEMP_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Substrate temp. \nless than %2d%c   "), 
-          settings.subsTempMinimum, char_celcium);
-        if(editMode) {
-          panel.textBlink(1, 10, 11);
-          settings.subsTempMinimum += direction;
-        }
+        fprintf_P(&lcd_out, PSTR("Substrate temp. \nless than {%2d}%c   "), 
+          settings.subsTempMinimum += direction, char_celcium);
         break;
       case TEST:
-        if(editMode == false) {
-          fprintf_P(&lcd_out, PSTR("Test all systems\n       -> Start?"));
+        storage.changed = false;
+        if(editMode == 0) {
+          textBlink = true;
+          fprintf_P(&lcd_out, PSTR("Test all systems\n       -> {Start?}"));
           doTest(false);
         } else {
-          fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> Stop?"));
+          fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
           doTest(true);
-        }
-        panel.textBlink(1, 10, 15);
-        if(direction != 0) {
-          editMode = false;
-          //storage.changed = false;
-          //doTest(false);
         }
         break;
       case 255: 
         menuItem = CLOCK;
       case CLOCK:
-        if(editMode == false) {
+        storage.changed = false;
+        /*if(editMode == 0) {
           //fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d\nDate: %02d-%02d-%4d"), 
           //  clock.hour(), clock.minute(), clock.second(), 
           //  clock.day(), clock.month(), clock.year());
@@ -315,7 +281,7 @@ public:
             panel.textBlink(1, 12, 15);       
           }
         }
-        editModeCursor = 4;
+        editModeCursor = 4;*/
         break;
       default:
         menuItem = HOME;
@@ -323,19 +289,6 @@ public:
         break;
     }
     direction = 0;
-    return;
-  }
-
-  void textBlink(bool _row, uint8_t _start, uint8_t _end) { 
-    if(lcdBlink) {
-      while(_start <= _end) {
-        lcd.setCursor(_start, _row); fprintf_P(&lcd_out, PSTR(" "));
-        _start++;
-      }
-      lcdBlink = false;
-    } else {
-      lcdBlink = true;   
-    }
   }
 
   void backlightBlink(uint8_t _count) {
@@ -346,16 +299,16 @@ public:
   }
 
 private:
+  uint16_t lastTouch;
+  uint16_t lastUpdate;
+  uint8_t homeScreenItem;
   int direction;
-  bool lcdBlink;
-  bool lcdBacklight;
 
   void homeScreen() {
-    fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d:%02d"), 
+    textBlink = true;
+    fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
       char_flower, char_flower, char_flower, char_flower, char_heart, 
       char_flower, char_heart, clock.hour(), clock.minute());
-    panel.textBlink(0, 13, 13);
-    lcd.setCursor(0,1);
 
     if(menuHomeItem >= 16)
       menuHomeItem = 0;
@@ -382,16 +335,11 @@ private:
   }
 
   void menuPeriod(const char * __fmt, uint8_t * _period) {
-    fprintf_P(&lcd_out, __fmt); lcd.setCursor(0,1);
-    if(_period == 0 && menuEdit == false) {
-      fprintf_P(&lcd_out, PSTR("is disable      "));
-      return;
-    }
-    fprintf_P(&lcd_out, PSTR("every %3d min   "), _period);
-    if(menuEdit) {
-      panel.textBlink(1, 6, 8);
-      _period += editButton;
-      return;
+    fprintf_P(&lcd_out, __fmt);
+    if(_period > 0 || menuEdit > 0) {
+      fprintf_P(&lcd_out, PSTR("every {%3d} min   "), _period); 
+    } else {
+      fprintf_P(&lcd_out, PSTR("is disable      ")); 
     }
   }
 
@@ -487,28 +435,20 @@ private:
 
   void buttonsLongPress() {
     melody.beep(2);
-    // reset text blink state
-    lcdBlink = false;
-    // action for simple Menu
-    if(menuItem != HOME && menuEdit == false) {
-      // enter to Edit Menu and return edit field
-      menuEditMode = true;
-      panel.update();
-      return;
-    }
-    // action for Edit menu
-    if(menuEdit && menuEditCursor > 0) {
+    if(editMode > 0) {
       // move to next edit field
-      menuEditCursor--;
-      panel.update();
-      return;
+      editMode--;
+      if(menuItem == CLOCK)
+        // save changed time
+        rtc.adjust(clock);
+    } else if(menuItem != HOME) {
+      // enable edit mode
+      editMode = 1;
+    } else {
+      // close Edit menu
+      editMode = 0;
     }
-    // save changed time
-    if(menuEdit && menuItem == CLOCK) {
-      rtc.adjust(clock);
-    }
-    // close Edit menu
-    panel.update();
+    panel.lcdUpdate();
   }
 
 } panel;
