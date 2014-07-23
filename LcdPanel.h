@@ -4,6 +4,7 @@
 #include "LiquidCrystal_I2C.h"
 #include "OneButton.h"
 #include "Settings.h"
+#include "RTClib.h"
 #include "Melody.h"
 
 // Declare LCD
@@ -56,8 +57,12 @@ OneButton leftButton(A3, true);
 // Declare Speaker digital pin
 Melody melody(8);
 
-// Declare 
+// Declare settings
 EEPROM storage;
+
+// Declare RTC
+RTC_DS1307 rtc;
+DateTime clock;
 
 // Declare LCD menu items
 static const uint8_t HOME = 0;
@@ -131,6 +136,24 @@ public:
     // timer fo 1 sec
     if((millis()/1000) - lastUpdate >= 1) {
       lastUpdate = millis()/1000;
+      // 10 sec after click
+      if(lastTouch+10 < lastUpdate) {
+        if(rtc.readnvram(ERROR) != NO_ERROR)
+          lcdAlert();
+        else if(rtc.readnvram(WARNING) != NO_WARNING)
+          lcdWarning();
+      } else
+      // 30 sec after click
+      if(lastTouch+30 < lastUpdate && 
+          menuItem != HOME && 
+          menuItem != TEST) {
+        menuEdit = 0;
+        menuItem = HOME;
+      } else
+      if(editMode == 0)
+        // update clock
+        clock = rtc.now();
+      // update LCD
       lcdUpdate();
     }
     // update push buttons
@@ -143,7 +166,7 @@ public:
   void lcdUpdate() {
     if(direction != 0) {
       melody.beep(1);
-      last_touch = millis()/1000;
+      lastTouch = millis()/1000;
       // enable backlight
       if(lcd.isBacklight() == false) {
         lcd.setBacklight(true);

@@ -4,7 +4,6 @@
 #include "LcdPanel.h"
 #include "MemoryFree.h"
 #include "Watchdog.h"
-#include "RTClib.h"
 #include "DHT.h"
 #include "DS18B20.h"
 #include "BH1750.h"
@@ -48,10 +47,6 @@ timer_t slow_timer(60); // sec
 
 // DHT sensor
 #define DHTTYPE DHT11
-
-// Declare RTC
-RTC_DS1307 rtc;
-DateTime clock;
 
 // Declare constants
 //static const char* DATA = "hydroponics";
@@ -119,6 +114,9 @@ void loop()
   // watchdog
   heartbeat();
 
+    // update LCD 
+    panel.update();
+
   if( fast_timer ) {
     // check level sensors
     check_levels();
@@ -126,32 +124,6 @@ void loop()
     watering();
     // update misting
     misting();
-    // prevent redundant update
-    if(panel.menuEdit == false) {
-      // update clock
-      clock = rtc.now();
-    }
-    // manage LCD
-    if(rtc.readnvram(ERROR) != NO_ERROR && 
-        panel.last_touch+10 < millis()/1000)
-      lcdAlert();
-    else
-    if(rtc.readnvram(WARNING) != NO_WARNING && 
-        panel.last_touch+10 < millis()/1000)
-      lcdWarning();
-    else
-    if(menuItem != HOME && 
-        panel.last_touch+30 < millis()/1000 &&
-        panel.menuItem != TEST)
-      panel.menuEdit = false;
-      panel.menuItem = HOME;
-    else
-    if(menuEdit)
-      panel.menuEdit = true;
-    else
-      panel.menuEdit = false;
-    // update LCD 
-    panel.update();
   }
 
   if( slow_timer ) {
