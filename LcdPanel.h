@@ -150,6 +150,13 @@ public:
         menuEdit = 0;
         menuItem = HOME;
       } else
+      // 5 min after click
+      if(lastTouch+300 < lastUpdate && 
+          rtc.readnvram(WARNING) == NO_WARNING &&
+          lcd.isBacklight()) {
+        // switch off backlight
+        lcd.setBacklight(false);
+      } else
       if(editMode == 0)
         // update clock
         clock = rtc.now();
@@ -366,15 +373,51 @@ private:
     }
   }
 
+  /*void settingClock(int _direction) {
+    uint8_t year = clock.year();
+    uint8_t month = clock.month();
+    uint8_t day = clock.day();
+    uint8_t hour = clock.hour();
+    uint8_t minute = clock.minute();
+
+    switch (menuEditCursor) {
+      case 4:
+        if(0 < hour && hour < 23)
+          hour += _direction;
+        else hour = 0 + _direction;
+        break;
+      case 3:
+        if(0 < minute && minute < 59)
+          minute += _direction;
+        else minute = 0 + _direction;
+        break;
+      case 2:
+        if(1 < day && day < 31)
+          day += _direction;
+        else day = 1 + _direction;
+        break;
+      case 1:
+        if(1 < month && month < 12)
+          month += _direction;
+        else month = 1 + _direction;
+        break;
+      case 0:
+        year += _direction;
+        break;
+      default:
+        menuEditCursor = 0;
+    }
+    clock = DateTime(year, month, day, hour, minute, 0);
+  }*/
+
   void lcdWarning() {
     lcd.setBacklight(true);
-    
+    textBlink = true;
     lcd.home();
     switch (rtc.readnvram(WARNING)) { 
       case WARNING_SUBSTRATE_LOW:
-        fprintf_P(&lcd_out, PSTR("Low substrate!  \nPlease add some!"));
+        fprintf_P(&lcd_out, PSTR("Low substrate!  \n{Please add some!}"));
         melody.beep(1);
-        panel.textBlink(1, 0, 15);
         return;
       case INFO_SUBSTRATE_FULL:
         fprintf_P(&lcd_out, PSTR("Substrate tank  \nis full! :)))   "));
@@ -384,31 +427,26 @@ private:
         fprintf_P(&lcd_out, PSTR("Substrate was   \ndelivered! :))) "));
         return;
       case WARNING_WATERING:
-        fprintf_P(&lcd_out, PSTR("Watering...     \nPlease wait.    "));
-        panel.textBlink(1, 0, 11);
+        fprintf_P(&lcd_out, PSTR("Watering...     \n{Please wait.}    "));
         return;
       case WARNING_MISTING:
         fprintf_P(&lcd_out, PSTR("Misting...      \nPlease wait.    "));
         return;
       case WARNING_AIR_COLD:
-        fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! :(  "));
+        fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! {:(}  "));
         melody.beep(1);
-        panel.textBlink(1, 12, 13);
         return;
       case WARNING_AIR_HOT:
-        fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! :(  "));
+        fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! {:(}  "));
         melody.beep(1);
-        panel.textBlink(1, 12, 13);
         return;
       case WARNING_SUBSTRATE_COLD:
-        fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! :(        "));
+        fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! {:(}        "));
         melody.beep(2);
-        panel.textBlink(1, 6, 7);
         return;
       case WARNING_NO_WATER:
-        fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! :(    "));
+        fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! {:(}    "));
         melody.beep(1);
-        panel.textBlink(1, 0, 12);
         return;
     }  
   }
@@ -416,32 +454,26 @@ private:
   void lcdAlert() {
     melody.beep(5);
     lcdBacklightBlink(1);
-
+    textBlink = true;
     lcd.home();
     switch (rtc.readnvram(ERROR)) {
       case ERROR_LOW_MEMORY:
-        fprintf_P(&lcd_out, PSTR("MEMORY ERROR!   \nLow memory!     "));
-        panel.textBlink(1, 0, 10);
+        fprintf_P(&lcd_out, PSTR("MEMORY ERROR!   \n{Low memory!}     "));
         return;
       case ERROR_EEPROM:
-        fprintf_P(&lcd_out, PSTR("EEPROM ERROR!   \nSettings reset! "));
-        panel.textBlink(1, 0, 14);
+        fprintf_P(&lcd_out, PSTR("EEPROM ERROR!   \n{Settings reset!} "));
         return;
       case ERROR_DHT:
-        fprintf_P(&lcd_out, PSTR("DHT ERROR!      \nCheck connection"));
-        panel.textBlink(1, 0, 15);
+        fprintf_P(&lcd_out, PSTR("DHT ERROR!      \n{Check connection}"));
         return;
       case ERROR_BH1750:
-        fprintf_P(&lcd_out, PSTR("BH1750 ERROR!   \nCheck connection"));
-        panel.textBlink(1, 0, 15);
+        fprintf_P(&lcd_out, PSTR("BH1750 ERROR!   \n{Check connection}"));
         return;
       case ERROR_DS18B20:
-        fprintf_P(&lcd_out, PSTR("DS18B20 ERROR!  \nCheck connection"));
-        panel.textBlink(1, 0, 15);
+        fprintf_P(&lcd_out, PSTR("DS18B20 ERROR!  \n{Check connection}"));
         return;
       case ERROR_NO_SUBSTRATE:
-        fprintf_P(&lcd_out, PSTR("No substrate!   \nPlants can die! "));
-        panel.textBlink(1, 0, 14);
+        fprintf_P(&lcd_out, PSTR("No substrate!   \n{Plants can die!} "));
         return;
     }  
   }

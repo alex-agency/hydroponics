@@ -29,22 +29,6 @@ const int NUM_INTERFACES = 1;
 // Declare radio
 RF24 radio(CE_PIN, CS_PIN);
 
-// Declare delay managers
-struct timer_t {
-  uint16_t last;
-  uint16_t interval;
-  timer_t(uint16_t _interval): interval(_interval) {}
-  operator bool(void) {
-    uint16_t now = millis()/1000;
-    bool result = now - last >= interval;
-    if ( result )
-      last = now;
-    return result;
-  }
-};
-timer_t fast_timer(1); // sec
-timer_t slow_timer(60); // sec
-
 // DHT sensor
 #define DHTTYPE DHT11
 
@@ -73,6 +57,8 @@ static const uint8_t PUMP_MISTINGPIN = 5;
 static const uint8_t LAMPPIN = 7;
 
 // Declare variables
+uint16_t timerFast;
+uint16_t timerSlow;
 uint16_t last_misting = 0;
 uint16_t last_watering = 0;
 uint16_t sunrise = 0;
@@ -91,17 +77,14 @@ void setup()
   Serial.begin(9600);
   fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = stderr = &serial_out;
-   
   // prevent continiously restart
   delay(500);
   // restart if memory lower 512 bytes
   softResetMem(512);
   // restart after freezing for 8 sec
   softResetTimeout();
-
   // initialize network
   rf24init();
-
   // initialize lcd
   panel.begin();
 }
@@ -113,54 +96,49 @@ void loop()
 {
   // watchdog
   heartbeat();
-
-    // update LCD 
-    panel.update();
-
-  if( fast_timer ) {
+  // timer fo 1 sec
+  if((millis()/1000) - timerFast >= 1) {
+    timerFast = millis()/1000;
     // check level sensors
     check_levels();
     // update watering
     watering();
     // update misting
     misting();
-  }
-
-  if( slow_timer ) {
-    // system check
-    doCheck();
-    // manage light
-    doLight();
-    // manage misting and watering
-    doWork();
-    // save settings
-    if(storage.changed && storage_ok) {
-      // WARNING: EEPROM can burn!
-      storage_ok = storage.save();
-      storage.changed = false;
+    // timer fo 1 min
+    if((millis()/1000) - timerSlow >= 60) {
+      timerSlow = millis()/1000;
+      // system check
+      doCheck();
+      // manage light
+      doLight();
+      // manage misting and watering
+      doWork();
+      // save settings
+      if(storage.changed && storage_ok) {
+        // WARNING: EEPROM can burn!
+        storage_ok = storage.save();
+        storage.changed = false;
+      }
+      // send data to base
+      //sendCommand( 1, (void*) &NAME, sizeof(NAME) );
+      /*sendCommand( HUMIDITY, (void*) &rtc.readnvram(HUMIDITY), 
+        sizeof(rtc.readnvram(HUMIDITY)) );
+      sendCommand( AIR_TEMP, (void*) &rtc.readnvram(AIR_TEMP), 
+        sizeof(rtc.readnvram(AIR_TEMP)) );
+      sendCommand( COMPUTER_TEMP, (void*) &rtc.readnvram(COMPUTER_TEMP),
+        sizeof(rtc.readnvram(COMPUTER_TEMP)) );
+      /*sendCommand(5, (void*) &states[SUBSTRATE_TEMP], sizeof(states[SUBSTRATE_TEMP]));
+      sendCommand(6, (void*) &states[LIGHT], sizeof(states[LIGHT]));
+      sendCommand(7, (void*) &states[PUMP_MISTING], sizeof(states[PUMP_MISTING]));
+      sendCommand(8, (void*) &states[PUMP_WATERING], sizeof(states[PUMP_WATERING]));
+      sendCommand(9, (void*) &states[LAMP], sizeof(states[LAMP]));
+      sendCommand(10, (void*) &states[WARNING], sizeof(states[WARNING]));
+      sendCommand(11, (void*) &states[ERROR], sizeof(states[ERROR]));*/
     }
-    // LCD sleeping after 5 min
-    if(rtc.readnvram(WARNING) == NO_WARNING &&
-        lcd.isBacklight() && panel.last_touch + 5*60 < millis()/1000) {
-      // switch off backlight
-      lcd.setBacklight(false);
-    }
-    // send data to base
-    //sendCommand( 1, (void*) &NAME, sizeof(NAME) );
-    /*sendCommand( HUMIDITY, (void*) &rtc.readnvram(HUMIDITY), 
-      sizeof(rtc.readnvram(HUMIDITY)) );
-    sendCommand( AIR_TEMP, (void*) &rtc.readnvram(AIR_TEMP), 
-      sizeof(rtc.readnvram(AIR_TEMP)) );
-    sendCommand( COMPUTER_TEMP, (void*) &rtc.readnvram(COMPUTER_TEMP),
-      sizeof(rtc.readnvram(COMPUTER_TEMP)) );
-    /*sendCommand(5, (void*) &states[SUBSTRATE_TEMP], sizeof(states[SUBSTRATE_TEMP]));
-    sendCommand(6, (void*) &states[LIGHT], sizeof(states[LIGHT]));
-    sendCommand(7, (void*) &states[PUMP_MISTING], sizeof(states[PUMP_MISTING]));
-    sendCommand(8, (void*) &states[PUMP_WATERING], sizeof(states[PUMP_WATERING]));
-    sendCommand(9, (void*) &states[LAMP], sizeof(states[LAMP]));
-    sendCommand(10, (void*) &states[WARNING], sizeof(states[WARNING]));
-    sendCommand(11, (void*) &states[ERROR], sizeof(states[ERROR]));*/
   }
+  // update LCD 
+  panel.update();
   // update network
   rf24receive();
 }
@@ -192,7 +170,9 @@ bool read_DHT() {
   rtc.writenvram(AIR_TEMP, dht.readTemperature());
 
   if( isnan(rtc.readnvram(HUMIDITY)) || isnan(rtc.readnvram(AIR_TEMP)) ) {
-    printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
+    #ifdef DEBUG_DHT11
+      printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
+    #endif
     return false;
   }
   #ifdef DEBUG_DHT11
@@ -207,7 +187,9 @@ bool read_DS18B20() {
   
   int value = ds.read(0);
   if(value == DS_DISCONNECTED) {
-    printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
+    #ifdef DEBUG_DS18B20
+      printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
+    #endif
     return false;
   }
   #ifdef DEBUG_DS18B20
@@ -217,7 +199,9 @@ bool read_DS18B20() {
 
   value = ds.read(1);
   if(value == DS_DISCONNECTED) {
-    printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
+    #ifdef DEBUG_DS18B20
+      printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
+    #endif
     return false;
   }
   #ifdef DEBUG_DS18B20
@@ -233,7 +217,9 @@ bool read_BH1750() {
   uint16_t value = lightMeter.readLightLevel();
 
   if(value < 0) {
-    printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
+    #ifdef DEBUG_BH1750
+      printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
+    #endif
     return false;
   }
   #ifdef DEBUG_BH1750
@@ -317,7 +303,9 @@ bool relays(uint8_t relay, uint8_t state) {
     digitalWrite(LAMPPIN, state);
     return true;
   }
-  printf_P(PSTR("RELAY: Error: '%s' is unknown!\n\r"), relay);
+  #ifdef DEBUG_RELAY
+    printf_P(PSTR("RELAY: Error: '%s' is unknown!\n\r"), relay);
+  #endif
   return false;
 }
 
@@ -578,41 +566,4 @@ void watering() {
   rtc.writenvram(WARNING, WARNING_WATERING);
   last_watering = millis()/1000;
   relayOn(PUMP_WATERING);
-}
-
-void settingClock(int _direction) {
-  uint8_t year = clock.year();
-  uint8_t month = clock.month();
-  uint8_t day = clock.day();
-  uint8_t hour = clock.hour();
-  uint8_t minute = clock.minute();
-
-  switch (menuEditCursor) {
-    case 4:
-      if(0 < hour && hour < 23)
-        hour += _direction;
-      else hour = 0 + _direction;
-      break;
-    case 3:
-      if(0 < minute && minute < 59)
-        minute += _direction;
-      else minute = 0 + _direction;
-      break;
-    case 2:
-      if(1 < day && day < 31)
-        day += _direction;
-      else day = 1 + _direction;
-      break;
-    case 1:
-      if(1 < month && month < 12)
-        month += _direction;
-      else month = 1 + _direction;
-      break;
-    case 0:
-      year += _direction;
-      break;
-    default:
-      menuEditCursor = 0;
-  }
-  clock = DateTime(year, month, day, hour, minute, 0);
 }
