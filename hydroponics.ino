@@ -29,11 +29,19 @@ const int NUM_INTERFACES = 1;
 // Declare radio
 RF24 radio(CE_PIN, CS_PIN);
 
-// DHT sensor
+// Declare DHT sensor
 #define DHTTYPE DHT11
 
+// Declare variables
+uint16_t timerFast = 0;
+uint16_t timerSlow = 0;
+uint16_t lastMisting = 0;
+uint16_t last_watering = 0;
+uint16_t sunrise = 0;
+uint8_t startMisting = 0;
+uint16_t startWatering = 0;
+bool substTankFull;
 // Declare constants
-//static const char* DATA = "hydroponics";
 static const uint8_t HUMIDITY = 2; // air humidity
 static const uint8_t AIR_TEMP = 3;
 static const uint8_t COMPUTER_TEMP = 4; // temperature inside
@@ -42,10 +50,8 @@ static const uint8_t LIGHT = 6; // light intensivity
 static const uint8_t PUMP_MISTING = 7;
 static const uint8_t PUMP_WATERING = 8;
 static const uint8_t LAMP = 9;
-static const uint8_t WARNING = 10;
-static const uint8_t ERROR = 11;
 static const uint16_t SUNNY_TRESHOLD = 2500; // lux
-// Declare pins
+// Define pins
 static const uint8_t DHTPIN = 3;
 static const uint8_t ONE_WIRE_BUS = 2;
 static const uint8_t SUBSTRATE_FULLPIN = A0;
@@ -55,16 +61,6 @@ static const uint8_t SUBSTRATE_LEVELPIN = A7;
 static const uint8_t PUMP_WATERINGPIN = 4;
 static const uint8_t PUMP_MISTINGPIN = 5;
 static const uint8_t LAMPPIN = 7;
-
-// Declare variables
-uint16_t timerFast;
-uint16_t timerSlow;
-uint16_t last_misting = 0;
-uint16_t last_watering = 0;
-uint16_t sunrise = 0;
-uint8_t misting_duration = 0;
-uint16_t start_watering = 0;
-bool substrate_full;
 
 /****************************************************************************/
 
@@ -85,7 +81,7 @@ void setup()
   softResetTimeout();
   // initialize network
   rf24init();
-  // initialize lcd
+  // initialize lcd panel
   panel.begin();
 }
 
@@ -145,14 +141,15 @@ void loop()
 
 /****************************************************************************/
 
-// Pass a layer3 packet to the layer2
-int sendPacket(uint8_t* message, uint8_t len, uint8_t interface, uint8_t macAddress) {  
-    // Here should be called the layer2 function corresponding to interface
-    if(interface == RF24_INTERFACE) {
-      rf24sendPacket(message, len, macAddress);
-      return 1;
-    }
-    return 0;
+// Pass a layer3 packet to the layer2 of MESH network
+int sendPacket(uint8_t* message, uint8_t len, 
+    uint8_t interface, uint8_t macAddress) {  
+  // Here should be called the layer2 function corresponding to interface
+  if(interface == RF24_INTERFACE) {
+    rf24sendPacket(message, len, macAddress);
+    return 1;
+  }
+  return 0;
 }
 
 void onCommandReceived(uint8_t command, void* data, uint8_t dataLen) {
@@ -233,8 +230,8 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    //states[ERROR] = ERROR_NO_SUBSTRATE;
-    //return;
+    states[ERROR] = ERROR_NO_SUBSTRATE;
+    return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
@@ -244,18 +241,18 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
   if(analogRead(WATER_LEVELPIN) > 700) {
-    //states[WARNING] = WARNING_NO_WATER;
-    //return;
+    states[WARNING] = WARNING_NO_WATER;
+    return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_FULLPIN) == 1) { 	  
-  	if(substrate_full == false) {
-      substrate_full = true;
+  	if(substTankFull == false) {
+      substTankFull = true;
       rtc.writenvram(WARNING, INFO_SUBSTRATE_FULL);
       return;
     }
   } else {
-  	substrate_full = false;
+  	substTankFull = false;
   }
 }
 
@@ -309,13 +306,12 @@ bool relays(uint8_t relay, uint8_t state) {
   return false;
 }
 
-void doCheck() {
+void check() {
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
   // check memory
   if(freeMemory() < 600) {
-    printf_P(PSTR("ERROR: Low memory!!!\n\r"));
     rtc.writenvram(ERROR, ERROR_LOW_MEMORY);
     return;
   }
@@ -324,17 +320,17 @@ void doCheck() {
     rtc.writenvram(ERROR, ERROR_EEPROM);
     return;
   }
-  // read and check DHT11 sensor
+  // read DHT sensor
   if(read_DHT() == false) {
     rtc.writenvram(ERROR, ERROR_DHT);
     return;
   }
-  // read and check BH1750 sensor
+  // read BH1750 sensor
   if(read_BH1750() == false) {
     rtc.writenvram(ERROR, ERROR_BH1750);
     return;
   }
-  // read and check DS18B20 sensor
+  // read DS18B20 sensors
   if(read_DS18B20() == false) {
     rtc.writenvram(ERROR, ERROR_DS18B20);
     return;
@@ -349,6 +345,7 @@ void doCheck() {
   }
   // check air temperature
   if(rtc.readnvram(AIR_TEMP) <= settings.airTempMinimum && 
+      // prevent nightly alarm
       clock.hour() >= 7) {
     rtc.writenvram(WARNING, WARNING_AIR_COLD);
     return;
@@ -359,8 +356,8 @@ void doCheck() {
   rtc.writenvram(WARNING, NO_WARNING);
 }
 
-void doTest(bool start) {
-  if(start && settings.lightMinimum != 10000) {
+void doTest() {
+  if(panel.testMode && settings.lightMinimum != 10000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: enable.\n\r"));
     #endif
@@ -379,10 +376,10 @@ void doTest(bool start) {
     // manage test settings
     doWork();
     // long misting after start only
-    misting_duration = 10; //sec
+    startMisting = 10; //sec
     return;
   }
-  if(start == false &&
+  if(panel.testMode == false &&
       settings.lightMinimum == 10000) {
     #ifdef DEBUG
       printf_P(PSTR("Test: Info: disable.\n\r"));
@@ -390,8 +387,8 @@ void doTest(bool start) {
     // restore previous settings
     settings = test;
     // turn off immediately
-    misting_duration = 0;
-    start_watering = 0;
+    startMisting = 0;
+    startWatering = 0;
     relayOff(PUMP_WATERING);
     return;
   }
@@ -402,46 +399,46 @@ void doWork() {
   if(rtc.readnvram(ERROR) != NO_ERROR) {
     return;
   }
-  uint8_t one_minute = 60;
+  uint8_t speed = 60; // sec per min
   // check humidity
   if(rtc.readnvram(HUMIDITY) <= settings.humidMinimum) {
-    one_minute /= 2; // do work twice often
+    speed /= 2; // do work twice often
   } else if(rtc.readnvram(HUMIDITY) >= settings.humidMaximum) {
-    one_minute *= 2; // do work twice rarely
+    speed *= 2; // do work twice rarely
   }
-  // sunny time
+  // sunny time (11-16 o'clock) + light
   if(11 <= clock.hour() && clock.hour() < 16 && 
       rtc.readnvram(LIGHT) >= SUNNY_TRESHOLD) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
-    checkWateringPeriod(settings.wateringSunnyPeriod, one_minute);
-    checkMistingPeriod(settings.mistingSunnyPeriod, one_minute);
+    checkWateringPeriod(settings.wateringSunnyPeriod, speed);
+    checkMistingPeriod(settings.mistingSunnyPeriod, speed);
     return;
   }
-  // night time 
+  // night time (20-8 o'clock) + light
   if((20 <= clock.hour() || clock.hour() < 8) && 
       rtc.readnvram(LIGHT) <= settings.lightMinimum) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
-    checkWateringPeriod(settings.wateringNightPeriod, one_minute);
-    checkMistingPeriod(settings.mistingNightPeriod, one_minute);
+    checkWateringPeriod(settings.wateringNightPeriod, speed);
+    checkMistingPeriod(settings.mistingNightPeriod, speed);
     return;
   }
-  // not sunny and not night time
-  checkWateringPeriod(settings.wateringOtherPeriod, one_minute);
-  checkMistingPeriod(settings.mistingOtherPeriod, one_minute);
+  // other time period
+  checkWateringPeriod(settings.wateringOtherPeriod, speed);
+  checkMistingPeriod(settings.mistingOtherPeriod, speed);
 }
 
 void checkWateringPeriod(uint8_t _period, uint8_t _time) {
   if(_period != 0 && millis()/1000 > last_watering + (_period * _time))
-    start_watering = millis()/1000;
+    startWatering = millis()/1000;
 }
 
 void checkMistingPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/1000 > last_misting + (_period * _time))
-    misting_duration = settings.mistingDuration;
+  if(_period != 0 && millis()/1000 > lastMisting + (_period * _time))
+    startMisting = settings.mistingDuration;
 }
 
 void doLight() { 
@@ -499,7 +496,7 @@ void doLight() {
 }
 
 void misting() {
-  if(misting_duration == 0 || 
+  if(startMisting == 0 || 
       rtc.readnvram(WARNING) == WARNING_NO_WATER) {
     // stop misting
     if(rtc.readnvram(PUMP_MISTING)) {
@@ -516,24 +513,24 @@ void misting() {
     printf_P(PSTR("Misting: Info: Misting...\n\r"));
   #endif
   rtc.writenvram(WARNING, WARNING_MISTING);
-  misting_duration--;
-  last_misting = millis()/1000;
+  startMisting--;
+  lastMisting = millis()/1000;
   relayOn(PUMP_MISTING);
 }
 
 void watering() {
-  if(start_watering == 0 && 
+  if(startWatering == 0 && 
   	  rtc.readnvram(PUMP_WATERING) == false) {
     return;
   }
-  bool timeIsOver = start_watering + (settings.wateringDuration*60) <= millis()/1000;
+  bool timeIsOver = startWatering + (settings.wateringDuration*60) <= millis()/1000;
   // stop watering
   if(rtc.readnvram(WARNING) == INFO_SUBSTRATE_DELIVERED && timeIsOver) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
     #endif
     relayOff(PUMP_WATERING);
-    start_watering = 0;
+    startWatering = 0;
     if(rtc.readnvram(WARNING) == WARNING_WATERING)
       rtc.writenvram(WARNING, NO_WARNING);
     return;
@@ -542,7 +539,7 @@ void watering() {
   if(timeIsOver || rtc.readnvram(ERROR) == ERROR_NO_SUBSTRATE) {
     relayOff(PUMP_WATERING);
     rtc.writenvram(WARNING, WARNING_SUBSTRATE_LOW);
-    start_watering = 0;
+    startWatering = 0;
     #ifdef DEBUG
       printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
     #endif
@@ -553,7 +550,7 @@ void watering() {
   if(rtc.readnvram(WARNING) == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 10;
   // pause every 30 sec
-  if((millis()/1000-start_watering) % 30 <= pauseDuration) {
+  if((millis()/1000-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif

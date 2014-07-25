@@ -65,50 +65,53 @@ RTC_DS1307 rtc;
 DateTime clock;
 
 // Declare LCD menu items
-static const uint8_t HOME = 0;
-static const uint8_t WATERING_DURATION = 1;
-static const uint8_t WATERING_SUNNY = 2;
-static const uint8_t WATERING_NIGHT = 3;
-static const uint8_t WATERING_OTHER = 4;
-static const uint8_t MISTING_DURATION = 5;
-static const uint8_t MISTING_SUNNY = 6;
-static const uint8_t MISTING_NIGHT = 7;
-static const uint8_t MISTING_OTHER = 8;
-static const uint8_t LIGHT_MINIMUM = 9;
-static const uint8_t LIGHT_DAY_DURATION = 10;
-static const uint8_t LIGHT_DAY_START = 11;
-static const uint8_t HUMIDITY_MINIMUM = 12;
-static const uint8_t HUMIDITY_MAXIMUM = 13;
-static const uint8_t AIR_TEMP_MINIMUM = 14;
-static const uint8_t AIR_TEMP_MAXIMUM = 15;
-static const uint8_t SUBSTRATE_TEMP_MINIMUM = 16;
-static const uint8_t TEST = 17;
-static const uint8_t CLOCK = 18;
+#define HOME 0
+#define WATERING_DURATION  1
+#define WATERING_SUNNY  2
+#define WATERING_NIGHT 3
+#define WATERING_OTHER 4
+#define MISTING_DURATION 5
+#define MISTING_SUNNY 6
+#define MISTING_NIGHT 7
+#define MISTING_OTHER  8
+#define LIGHT_MINIMUM  9
+#define LIGHT_DAY_DURATION  10
+#define LIGHT_DAY_START  11
+#define HUMIDITY_MINIMUM  12
+#define HUMIDITY_MAXIMUM  13
+#define AIR_TEMP_MINIMUM  14
+#define AIR_TEMP_MAXIMUM  15
+#define SUBSTRATE_TEMP_MINIMUM  16
+#define TEST  17
+#define CLOCK  18
 // Declare warning states
-static const uint8_t NO_WARNING = 0;
-static const uint8_t INFO_SUBSTRATE_FULL = 1;
-static const uint8_t WARNING_SUBSTRATE_LOW = 2;
-static const uint8_t INFO_SUBSTRATE_DELIVERED = 3;
-static const uint8_t WARNING_WATERING = 4;
-static const uint8_t WARNING_MISTING = 5;
-static const uint8_t WARNING_AIR_COLD = 6;
-static const uint8_t WARNING_AIR_HOT = 7;
-static const uint8_t WARNING_SUBSTRATE_COLD = 8;
-static const uint8_t WARNING_NO_WATER = 9;
+static const uint8_t WARNING = 10;
+#define NO_WARNING  0
+#define INFO_SUBSTRATE_FULL  1
+#define WARNING_SUBSTRATE_LOW  2
+#define INFO_SUBSTRATE_DELIVERED  3
+#define WARNING_WATERING  4
+#define WARNING_MISTING  5
+#define WARNING_AIR_COLD  6
+#define WARNING_AIR_HOT  7
+#define WARNING_SUBSTRATE_COLD  8
+#define WARNING_NO_WATER  9
 // Declare error states
-static const uint8_t NO_ERROR = 0;
-static const uint8_t ERROR_LOW_MEMORY = 10;
-static const uint8_t ERROR_EEPROM = 11;
-static const uint8_t ERROR_DHT = 12;
-static const uint8_t ERROR_BH1750 = 13;
-static const uint8_t ERROR_DS18B20 = 14;
-static const uint8_t ERROR_NO_SUBSTRATE = 15;
+static const uint8_t ERROR = 11;
+#define NO_ERROR  0
+#define ERROR_LOW_MEMORY  10
+#define ERROR_EEPROM  11
+#define ERROR_DHT  12
+#define ERROR_BH1750  13
+#define ERROR_DS18B20  14
+#define ERROR_NO_SUBSTRATE  15
 
 class LcdPanel 
 {
 public:
   uint8_t editMode;
   uint8_t menuItem;
+  bool testMode;
 
   void begin() {
     // Configure output
@@ -147,7 +150,7 @@ public:
       if(lastTouch+30 < lastUpdate && 
           menuItem != HOME && 
           menuItem != TEST) {
-        menuEdit = 0;
+        editMode = 0;
         menuItem = HOME;
       } else
       // 5 min after click
@@ -202,15 +205,15 @@ public:
         break;
       case WATERING_SUNNY:
         menuPeriod(PSTR("Watering sunny  \n"), 
-          &settings.wateringSunnyPeriod += direction);
+          &(settings.wateringSunnyPeriod += direction));
         break;
       case WATERING_NIGHT:
         menuPeriod(PSTR("Watering night  \n"), 
-          &settings.wateringNightPeriod += direction);
+          &(settings.wateringNightPeriod += direction));
         break;
       case WATERING_OTHER:
         menuPeriod(PSTR("Watering evening\n"), 
-          &settings.wateringOtherPeriod += direction);
+          &(settings.wateringOtherPeriod += direction));
         break;
       case MISTING_DURATION:
         fprintf_P(&lcd_out, PSTR("Misting duration\nfor {%2d} sec      "), 
@@ -218,15 +221,15 @@ public:
         break;
       case MISTING_SUNNY:
         menuPeriod(PSTR("Misting sunny   \n"),
-          &settings.mistingSunnyPeriod += direction);
+          &(settings.mistingSunnyPeriod += direction));
         break;
       case MISTING_NIGHT:
         menuPeriod(PSTR("Misting night   \n"), 
-          &settings.mistingNightPeriod += direction);
+          &(settings.mistingNightPeriod += direction));
         break;
       case MISTING_OTHER:
         menuPeriod(PSTR("Misting evening \n"), 
-          &settings.mistingOtherPeriod += direction);
+          &(settings.mistingOtherPeriod += direction));
         break;
       case LIGHT_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Light not less  \nthan {%4d} lux   "), 
@@ -273,10 +276,10 @@ public:
         if(editMode == 0) {
           textBlink = true;
           fprintf_P(&lcd_out, PSTR("Test all systems\n       -> {Start?}"));
-          doTest(false);
+          testMode = false;
         } else {
           fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
-          doTest(true);
+          testMode = true;
         }
         break;
       case 255: 

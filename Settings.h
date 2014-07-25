@@ -50,7 +50,7 @@ class EEPROM
             printf_P(PSTR("EEPROM: Info: Settings loaded from address: %d.\n\r"),
             address_offset);
           #endif
-          ok = trut;
+          ok = true;
           return true;
 	      }
         address_offset++;
