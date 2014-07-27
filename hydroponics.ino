@@ -19,6 +19,9 @@ static int serial_putchar(char c, FILE *) {
 };
 FILE serial_out = {0};
 
+// Declare Lcd Panel
+LcdPanel panel;
+
 // Declare MESH network
 const uint32_t deviceType = 001;
 uint32_t deviceUniqueId = 100002;
@@ -36,21 +39,11 @@ RF24 radio(CE_PIN, CS_PIN);
 uint16_t timerFast = 0;
 uint16_t timerSlow = 0;
 uint16_t lastMisting = 0;
-uint16_t last_watering = 0;
+uint16_t lastWatering = 0;
 uint16_t sunrise = 0;
 uint8_t startMisting = 0;
 uint16_t startWatering = 0;
-bool substTankFull;
-// Declare constants
-static const uint8_t HUMIDITY = 2; // air humidity
-static const uint8_t AIR_TEMP = 3;
-static const uint8_t COMPUTER_TEMP = 4; // temperature inside
-static const uint8_t SUBSTRATE_TEMP = 5;
-static const uint8_t LIGHT = 6; // light intensivity
-static const uint8_t PUMP_MISTING = 7;
-static const uint8_t PUMP_WATERING = 8;
-static const uint8_t LAMP = 9;
-static const uint16_t SUNNY_TRESHOLD = 2500; // lux
+bool substTankFull = false;
 // Define pins
 static const uint8_t DHTPIN = 3;
 static const uint8_t ONE_WIRE_BUS = 2;
@@ -105,15 +98,15 @@ void loop()
     if((millis()/1000) - timerSlow >= 60) {
       timerSlow = millis()/1000;
       // system check
-      doCheck();
+      check();
       // manage light
       doLight();
       // manage misting and watering
       doWork();
       // save settings
-      if(storage.changed && storage_ok) {
+      if(storage.changed && storage.ok) {
         // WARNING: EEPROM can burn!
-        storage_ok = storage.save();
+        storage.save();
         storage.changed = false;
       }
       // send data to base
@@ -230,7 +223,7 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    states[ERROR] = ERROR_NO_SUBSTRATE;
+    rtc.writenvram(ERROR, ERROR_NO_SUBSTRATE);
     return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
@@ -241,7 +234,7 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
   if(analogRead(WATER_LEVELPIN) > 700) {
-    states[WARNING] = WARNING_NO_WATER;
+    rtc.writenvram(WARNING, WARNING_NO_WATER);
     return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
@@ -316,7 +309,7 @@ void check() {
     return;
   }
   // check EEPROM
-  if(storage_ok == false) {
+  if(storage.ok == false) {
     rtc.writenvram(ERROR, ERROR_EEPROM);
     return;
   }
@@ -356,44 +349,6 @@ void check() {
   rtc.writenvram(WARNING, NO_WARNING);
 }
 
-void doTest() {
-  if(panel.testMode && settings.lightMinimum != 10000) {
-    #ifdef DEBUG
-      printf_P(PSTR("Test: Info: enable.\n\r"));
-    #endif
-    // save previous settings
-    test = settings;
-    // change settings for test
-    settings.lightMinimum = 10000; //lux
-    settings.lightDayDuration = 18; //hours
-    settings.mistingSunnyPeriod = 1; //min
-    settings.mistingNightPeriod = 1; //min
-    settings.mistingOtherPeriod = 1; //min
-    settings.wateringSunnyPeriod = 3; //min
-    settings.wateringNightPeriod = 3; //min
-    settings.wateringOtherPeriod = 3; //min
-    settings.wateringDuration = 2; //min
-    // manage test settings
-    doWork();
-    // long misting after start only
-    startMisting = 10; //sec
-    return;
-  }
-  if(panel.testMode == false &&
-      settings.lightMinimum == 10000) {
-    #ifdef DEBUG
-      printf_P(PSTR("Test: Info: disable.\n\r"));
-    #endif    
-    // restore previous settings
-    settings = test;
-    // turn off immediately
-    startMisting = 0;
-    startWatering = 0;
-    relayOff(PUMP_WATERING);
-    return;
-  }
-}
-
 void doWork() {
   // don't do any work while error
   if(rtc.readnvram(ERROR) != NO_ERROR) {
@@ -408,7 +363,7 @@ void doWork() {
   }
   // sunny time (11-16 o'clock) + light
   if(11 <= clock.hour() && clock.hour() < 16 && 
-      rtc.readnvram(LIGHT) >= SUNNY_TRESHOLD) {
+      rtc.readnvram(LIGHT) >= 2500) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
@@ -432,7 +387,7 @@ void doWork() {
 }
 
 void checkWateringPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/1000 > last_watering + (_period * _time))
+  if(_period != 0 && millis()/1000 > lastWatering + (_period * _time))
     startWatering = millis()/1000;
 }
 
@@ -561,6 +516,6 @@ void watering() {
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
   rtc.writenvram(WARNING, WARNING_WATERING);
-  last_watering = millis()/1000;
+  lastWatering = millis()/1000;
   relayOn(PUMP_WATERING);
 }
