@@ -2,17 +2,6 @@
 #define MELODY_H
 
 #include "pitches.h"
-//#include <avr/pgmspace.h>
-
-//#define DEBUG
-
-// Avoid spurious warnings
-#if ! defined( NATIVE ) && defined( ARDUINO )
-#undef PROGMEM
-#define PROGMEM __attribute__(( section(".progmem.data") ))
-#undef PSTR
-#define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
-#endif
 
 // short beep
 #define BEEP  0
@@ -94,7 +83,7 @@ private:
         numNotes = sizeof(r2d2)/sizeof(uint16_t);
         break;
     }
-    #ifdef DEBUG
+    #ifdef DEBUG_MELODY
       printf_P(PSTR("MELODY: Info: Melody: #%d, Notes count: #%d.\n\r"), 
         _melodyNum, numNotes);
     #endif
@@ -106,7 +95,7 @@ private:
     uint16_t freq = notes[noteIndex] * 2;
     uint16_t duration = tempo * beats[noteIndex];
 	
-    #ifdef DEBUG
+    #ifdef DEBUG_MELODY
       printf_P(PSTR("MELODY: Info: Note #%d, freq: %d*2, duration: %d*%d.\n\r"),
       noteIndex, notes[noteIndex], beats[noteIndex], tempo);
     #endif

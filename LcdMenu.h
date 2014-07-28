@@ -8,6 +8,33 @@
 
 // Declare LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+// Declare lcd output
+FILE lcd_out = {0};
+static bool charErase = false;
+static bool textErase = false;
+static bool textBlink = false;
+static int lcd_putchar(char c, FILE *) {
+  switch(c) {
+    case '\n':
+      lcd.setCursor(0,1);
+      break;
+    case '{':
+      if(textBlink && textErase)
+        charErase = true;
+      break;
+    case '}':
+      charErase = false;
+      textErase = !textErase;
+      break;
+    default:
+      if(charErase)
+        lcd.write(' ');
+      else
+        lcd.write(c);
+  }
+  return 0;
+};
+
 // Declare custom LCD characters
 static const uint8_t C_CELCIUM = 0;
 uint8_t char_celcium[8] = {24, 24, 3, 4, 4, 4, 3, 0};
@@ -21,35 +48,6 @@ static const uint8_t C_FLOWER = 4;
 uint8_t char_flower[8] = {14, 27, 21, 14, 4, 12, 4, 0};
 static const uint8_t C_LAMP = 5;
 uint8_t char_lamp[8] = {14, 17, 17, 17, 14, 14, 4, 0};
-
-// Declare output
-static bool charErase = false;
-static bool textErase = false;
-static uint8_t textBlinkPos = false;
-static int lcd_putchar(char c, FILE *) {
-  switch(c) {
-    case '\n':
-      lcd.setCursor(0,1);
-      break;
-    case '{':
-      if(textErase && textBlinkPos == menu.editMode)
-        charErase = true;
-      if(textBlinkPos > 0)
-        textBlinkPos++;
-      break;
-    case '}':
-      charErase = false;
-      textErase = !textErase;
-      break;
-    default:
-      if(textBlinkPos > 0 && charErase)
-        lcd.write(' ');
-      else
-        lcd.write(c);
-  }
-  return 0;
-};
-FILE lcd_out = {0};
 
 // Declare Speaker digital pin
 Melody melody(8);
@@ -82,7 +80,6 @@ static const uint8_t SUBSTRATE_TEMP_MINIMUM = 16;
 static const uint8_t TEST = 17;
 static const uint8_t CLOCK = 18;
 // Declare warning states
-static const uint8_t WARNING = 10;
 static const uint8_t NO_WARNING = 0;
 static const uint8_t INFO_SUBSTRATE_FULL = 1;
 static const uint8_t WARNING_SUBSTRATE_LOW = 2;
@@ -94,7 +91,6 @@ static const uint8_t WARNING_AIR_HOT = 7;
 static const uint8_t WARNING_SUBSTRATE_COLD = 8;
 static const uint8_t WARNING_NO_WATER = 9;
 // Declare error states
-static const uint8_t ERROR = 11;
 static const uint8_t NO_ERROR = 0;
 static const uint8_t ERROR_LOW_MEMORY = 10;
 static const uint8_t ERROR_EEPROM = 11;
@@ -111,6 +107,8 @@ static const uint8_t LIGHT = 6; // light intensivity
 static const uint8_t PUMP_MISTING = 7;
 static const uint8_t PUMP_WATERING = 8;
 static const uint8_t LAMP = 9;
+static const uint8_t WARNING = 10;
+static const uint8_t ERROR = 11;
 
 
 class LcdMenu
@@ -187,15 +185,17 @@ public:
         return;
       }
     }
+    if(editMode == 2)
+      editMode = false;
     if(editMode == false) {
       // move forward to next menu
       menuItem += nextItem;
       // don't settings values
       nextItem = 0;
-      textBlinkPos = false;
+      textBlink = false;
     } else {
-      // enable blink and set blink position
-      textBlinkPos = editMode;
+      // enable blink
+      textBlink = true;
     }
     // print menu
     lcd.home();
@@ -307,25 +307,53 @@ public:
       case 255: 
         menuItem = CLOCK;
       case CLOCK:
-        storage.changed = false;
         if(editMode == false) {
           fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d\nDate: %02d-%02d-%4d"), 
             clock.hour(), clock.minute(), clock.second(), 
             clock.day(), clock.month(), clock.year());
-        } else 
-        if(nextItem != 0) {
-          //settingClock(nextItem);
-          // clock not used storage
-          //storage.changed = false;
-        } 
+        }
         else {
-          if(editMode == true)
-            editMode = blinkPos = 7;
-          else if(editMode == 2)
-            // close edit mode
-            editMode = false;
-          fprintf_P(&lcd_out, PSTR("Setting time    \n{%02d}:{%02d} {%02d}-{%02d}-{%4d}"), 
-            clock.hour(), clock.minute(), clock.day(), clock.month(), clock.year());
+          uint8_t hour = clock.hour();
+          uint8_t minute = clock.minute();
+          uint8_t day = clock.day();
+          uint8_t month = clock.month();
+          uint16_t year = clock.year();
+          fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d"), 
+            hour, minute, day, month, year);
+          storage.changed = false;
+          switch (menuItem) {
+            case true:
+              editMode = 7;
+            case 7:
+              if(0 < hour && hour < 23)
+                hour += nextItem;
+              else hour = 0 + nextItem;
+              textBlinkPos(1, 0, 1);
+              break;
+            case 6:
+              if(0 < minute && minute < 59)
+                minute += nextItem;
+              else minute = 0 + nextItem;
+              textBlinkPos(1, 3, 4);
+              break;
+            case 5:
+              if(1 < day && day < 31)
+                day += nextItem;
+              else day = 1 + nextItem;
+              textBlinkPos(1, 6, 7);
+              break;
+            case 4:
+              if(1 < month && month < 12)
+                month += nextItem;
+              else month = 1 + nextItem;
+              textBlinkPos(1, 9, 10);
+              break;
+            case 3:
+              year += nextItem;
+              textBlinkPos(1, 12, 15);
+              break;
+          }
+          clock = DateTime(year, month, day, hour, minute, 0);
         }
         break;
       default:
@@ -336,17 +364,24 @@ public:
     nextItem = 0;
   }
 
+private:
+  uint16_t lastTouch;
+  uint16_t lastUpdate;
+  uint8_t homeScreenItem;
+
+  void textBlinkPos(uint8_t _row, uint8_t _start, uint8_t _end) {
+    while(textErase && _start <= _end) {
+      lcd.setCursor(_start, _row); fprintf_P(&lcd_out, PSTR(" "));
+      _start++;
+    }
+  }
+
   void backlightBlink(uint8_t _count) {
     for(uint8_t i=0; i<_count; i++) {
       lcd.setBacklight(false); delay(250);
       lcd.setBacklight(true); delay(250);
     }
   }
-
-private:
-  uint16_t lastTouch;
-  uint16_t lastUpdate;
-  uint8_t homeScreenItem;
 
   void homeScreen() {
     textBlink = true;
@@ -386,43 +421,6 @@ private:
       fprintf_P(&lcd_out, PSTR("is disable      ")); 
     }
   }
-
-  /*void settingClock(int _nextItem) {
-    uint8_t year = clock.year();
-    uint8_t month = clock.month();
-    uint8_t day = clock.day();
-    uint8_t hour = clock.hour();
-    uint8_t minute = clock.minute();
-
-    switch (menuEditCursor) {
-      case 4:
-        if(0 < hour && hour < 23)
-          hour += _nextItem;
-        else hour = 0 + _nextItem;
-        break;
-      case 3:
-        if(0 < minute && minute < 59)
-          minute += _nextItem;
-        else minute = 0 + _nextItem;
-        break;
-      case 2:
-        if(1 < day && day < 31)
-          day += _nextItem;
-        else day = 1 + _nextItem;
-        break;
-      case 1:
-        if(1 < month && month < 12)
-          month += _nextItem;
-        else month = 1 + _nextItem;
-        break;
-      case 0:
-        year += _nextItem;
-        break;
-      default:
-        menuEditCursor = 0;
-    }
-    clock = DateTime(year, month, day, hour, minute, 0);
-  }*/
 
   void showWarning() {
     lcd.setBacklight(true);

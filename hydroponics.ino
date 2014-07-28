@@ -110,20 +110,27 @@ void loop()
         storage.changed = false;
       }
       // send data to base
-      //sendCommand( 1, (void*) &NAME, sizeof(NAME) );
-      /*sendCommand( HUMIDITY, (void*) &rtc.readnvram(HUMIDITY), 
+      sendCommand( 1, (void*) &"Hydroponica", sizeof("Hydroponica") );
+      sendCommand( HUMIDITY, (void*) rtc.readnvram(HUMIDITY), 
         sizeof(rtc.readnvram(HUMIDITY)) );
-      sendCommand( AIR_TEMP, (void*) &rtc.readnvram(AIR_TEMP), 
+      sendCommand( AIR_TEMP, (void*) rtc.readnvram(AIR_TEMP), 
         sizeof(rtc.readnvram(AIR_TEMP)) );
-      sendCommand( COMPUTER_TEMP, (void*) &rtc.readnvram(COMPUTER_TEMP),
+      sendCommand( COMPUTER_TEMP, (void*) rtc.readnvram(COMPUTER_TEMP),
         sizeof(rtc.readnvram(COMPUTER_TEMP)) );
-      /*sendCommand(5, (void*) &states[SUBSTRATE_TEMP], sizeof(states[SUBSTRATE_TEMP]));
-      sendCommand(6, (void*) &states[LIGHT], sizeof(states[LIGHT]));
-      sendCommand(7, (void*) &states[PUMP_MISTING], sizeof(states[PUMP_MISTING]));
-      sendCommand(8, (void*) &states[PUMP_WATERING], sizeof(states[PUMP_WATERING]));
-      sendCommand(9, (void*) &states[LAMP], sizeof(states[LAMP]));
-      sendCommand(10, (void*) &states[WARNING], sizeof(states[WARNING]));
-      sendCommand(11, (void*) &states[ERROR], sizeof(states[ERROR]));*/
+      sendCommand( SUBSTRATE_TEMP, (void*) rtc.readnvram(SUBSTRATE_TEMP), 
+        sizeof(rtc.readnvram(SUBSTRATE_TEMP)) );    
+      sendCommand( LIGHT, (void*) rtc.readnvram(LIGHT), 
+        sizeof(rtc.readnvram(LIGHT)) );
+      sendCommand( PUMP_MISTING, (void*) rtc.readnvram(PUMP_MISTING), 
+        sizeof(rtc.readnvram(PUMP_MISTING)) );
+      sendCommand( PUMP_WATERING, (void*) rtc.readnvram(PUMP_WATERING), 
+        sizeof(rtc.readnvram(PUMP_WATERING)) );
+      sendCommand( LAMP, (void*) rtc.readnvram(LAMP), 
+        sizeof(rtc.readnvram(LAMP)) );
+      sendCommand( WARNING, (void*) rtc.readnvram(WARNING), 
+        sizeof(rtc.readnvram(WARNING)) );
+      sendCommand( ERROR, (void*) rtc.readnvram(ERROR), 
+        sizeof(rtc.readnvram(ERROR)) );
     }
   }
   // update LCD 
