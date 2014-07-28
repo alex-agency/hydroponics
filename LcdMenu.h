@@ -4,15 +4,13 @@
 #include "LiquidCrystal_I2C.h"
 #include "Settings.h"
 #include "RTClib.h"
-#include "Melody.h"
+#include "Beep.h"
 
 // Declare LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // Declare lcd output
 FILE lcd_out = {0};
-static bool charErase = false;
-static bool textErase = false;
-static bool textBlink = false;
+static bool charErase, textErase, textBlink = false;
 static int lcd_putchar(char c, FILE *) {
   switch(c) {
     case '\n':
@@ -28,29 +26,14 @@ static int lcd_putchar(char c, FILE *) {
       break;
     default:
       if(charErase)
-        lcd.write(' ');
-      else
-        lcd.write(c);
+        c = ' ';
+      lcd.write(c);
   }
   return 0;
 };
 
-// Declare custom LCD characters
-static const uint8_t C_CELCIUM = 0;
-uint8_t char_celcium[8] = {24, 24, 3, 4, 4, 4, 3, 0};
-static const uint8_t C_HEART = 1;
-uint8_t char_heart[8] = {0, 10, 21, 17, 10, 4, 0, 0};
-static const uint8_t C_HUMIDITY = 2;
-uint8_t char_humidity[8] = {4, 10, 10, 17, 17, 17, 14, 0};
-static const uint8_t C_TEMP = 3;
-uint8_t char_temp[8] = {4, 10, 10, 14, 31, 31, 14, 0};
-static const uint8_t C_FLOWER = 4;
-uint8_t char_flower[8] = {14, 27, 21, 14, 4, 12, 4, 0};
-static const uint8_t C_LAMP = 5;
-uint8_t char_lamp[8] = {14, 17, 17, 17, 14, 14, 4, 0};
-
 // Declare Speaker digital pin
-Melody melody(8);
+Beep beep(8);
 
 // Declare settings
 EEPROM storage;
@@ -59,6 +42,13 @@ EEPROM storage;
 RTC_DS1307 rtc;
 DateTime clock;
 
+// Declare custom LCD characters
+static const uint8_t C_CELCIUM = 0;
+static const uint8_t C_HEART = 1;
+static const uint8_t C_HUMIDITY = 2;
+static const uint8_t C_TEMP = 3;
+static const uint8_t C_FLOWER = 4;
+static const uint8_t C_LAMP = 5;
 // Declare LCD menu items
 static const uint8_t HOME = 0;
 static const uint8_t WATERING_DURATION = 1;
@@ -119,31 +109,28 @@ public:
   int nextItem;
 
   void begin() {
+    // Load settings
+    storage.load();
     // Configure output
     fdev_setup_stream(&lcd_out, lcd_putchar, NULL, _FDEV_SETUP_WRITE);
     // Configure lcd
     lcd.begin();
     // load custom characters
-    lcd.createChar(C_CELCIUM, char_celcium);
-    lcd.createChar(C_HEART, char_heart);
-    lcd.createChar(C_HUMIDITY, char_humidity);
-    lcd.createChar(C_TEMP, char_temp);
-    lcd.createChar(C_FLOWER, char_flower);
-    lcd.createChar(C_LAMP, char_lamp);
+    lcd.createChar(C_CELCIUM, settings.c_celcium);
+    lcd.createChar(C_HEART, settings.c_heart);
+    lcd.createChar(C_HUMIDITY, settings.c_humidity);
+    lcd.createChar(C_TEMP, settings.c_temp);
+    lcd.createChar(C_FLOWER, settings.c_flower);
+    lcd.createChar(C_LAMP, settings.c_lamp);
     // init values
-    lastTouch = millis()/1000;
-    lastUpdate = lastTouch;
-    editMode, menuItem, homeScreenItem = 0;
-    // Load settings
-    storage.load();
-    // "R2D2" melody
-    melody.play(R2D2);
+    lastUpdate, lastTouch = millis()/1000;
   }
 
   void update() {
+    uint16_t now = millis()/1000;
     // timer fo 1 sec
-    if((millis()/1000) - lastUpdate >= 1) {
-      lastUpdate = millis()/1000;
+    if(now - lastUpdate >= 1) {
+      lastUpdate = now;
       // 10 sec after click
       if(lastTouch+10 < lastUpdate) {
         if(rtc.readnvram(ERROR) != NO_ERROR)
@@ -171,13 +158,13 @@ public:
       // update LCD
       showMenu();
     }
-    // update melody
-    melody.update();
+    // update beep
+    beep.update();
   }
 
   void showMenu() {
     if(nextItem != 0) {
-      melody.beep(1);
+      beep.play(1);
       lastTouch = millis()/1000;
       // enable backlight
       if(lcd.isBacklight() == false) {
@@ -194,7 +181,7 @@ public:
       nextItem = 0;
       textBlink = false;
     } else {
-      // enable blink
+      // enable blink for edit mode
       textBlink = true;
     }
     // print menu
@@ -265,15 +252,15 @@ public:
         break;
       case AIR_TEMP_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Temp. air not   \nless than {%2d}%c   "), 
-          settings.airTempMinimum += nextItem, char_celcium);
+          settings.airTempMinimum += nextItem, C_CELCIUM);
         break;
       case AIR_TEMP_MAXIMUM:
         fprintf_P(&lcd_out, PSTR("Temp. air not   \ngreater than {%2d}%c"), 
-          settings.airTempMaximum += nextItem, char_celcium);
+          settings.airTempMaximum += nextItem, C_CELCIUM);
         break;
       case SUBSTRATE_TEMP_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Substrate temp. \nless than {%2d}%c   "), 
-          settings.subsTempMinimum += nextItem, char_celcium);
+          settings.subsTempMinimum += nextItem, C_CELCIUM);
         break;
       case TEST:
         storage.changed = false;
@@ -294,12 +281,13 @@ public:
             // change settings for test
             settings.lightMinimum = 10000; //lux
             settings.lightDayDuration = 18; //hours
-            settings.mistingSunnyPeriod = 1; //min
-            settings.mistingNightPeriod = 1; //min
+            settings.mistingSunnyPeriod, 
+            settings.mistingNightPeriod, 
             settings.mistingOtherPeriod = 1; //min
-            settings.wateringSunnyPeriod = 3; //min
-            settings.wateringNightPeriod = 3; //min
+            settings.wateringSunnyPeriod, 
+            settings.wateringNightPeriod,
             settings.wateringOtherPeriod = 3; //min
+
             settings.wateringDuration = 2; //min
           }
         }
@@ -307,54 +295,7 @@ public:
       case 255: 
         menuItem = CLOCK;
       case CLOCK:
-        if(editMode == false) {
-          fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d\nDate: %02d-%02d-%4d"), 
-            clock.hour(), clock.minute(), clock.second(), 
-            clock.day(), clock.month(), clock.year());
-        }
-        else {
-          uint8_t hour = clock.hour();
-          uint8_t minute = clock.minute();
-          uint8_t day = clock.day();
-          uint8_t month = clock.month();
-          uint16_t year = clock.year();
-          fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d"), 
-            hour, minute, day, month, year);
-          storage.changed = false;
-          switch (menuItem) {
-            case true:
-              editMode = 7;
-            case 7:
-              if(0 < hour && hour < 23)
-                hour += nextItem;
-              else hour = 0 + nextItem;
-              textBlinkPos(1, 0, 1);
-              break;
-            case 6:
-              if(0 < minute && minute < 59)
-                minute += nextItem;
-              else minute = 0 + nextItem;
-              textBlinkPos(1, 3, 4);
-              break;
-            case 5:
-              if(1 < day && day < 31)
-                day += nextItem;
-              else day = 1 + nextItem;
-              textBlinkPos(1, 6, 7);
-              break;
-            case 4:
-              if(1 < month && month < 12)
-                month += nextItem;
-              else month = 1 + nextItem;
-              textBlinkPos(1, 9, 10);
-              break;
-            case 3:
-              year += nextItem;
-              textBlinkPos(1, 12, 15);
-              break;
-          }
-          clock = DateTime(year, month, day, hour, minute, 0);
-        }
+        clockScreen();
         break;
       default:
         menuItem = HOME;
@@ -386,31 +327,91 @@ private:
   void homeScreen() {
     textBlink = true;
     fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
-      char_flower, char_flower, char_flower, char_flower, char_heart, 
-      char_flower, char_heart, clock.hour(), clock.minute());
+      C_FLOWER, C_FLOWER, C_FLOWER, C_FLOWER, C_HEART, 
+      C_FLOWER, C_HEART, clock.hour(), clock.minute());
 
     if(homeScreenItem >= 16)
       homeScreenItem = 0;
     switch (homeScreenItem) {
       case 0:
         fprintf_P(&lcd_out, PSTR("Air: %c %2d%c %c %2d%%"),
-          char_temp, rtc.readnvram(AIR_TEMP), char_celcium, char_humidity, 
+          C_TEMP, rtc.readnvram(AIR_TEMP), C_CELCIUM, C_HUMIDITY, 
           rtc.readnvram(HUMIDITY));
         break;
       case 4:
         fprintf_P(&lcd_out, PSTR("Substrate: %c %2d%c"),
-          char_temp, rtc.readnvram(SUBSTRATE_TEMP), char_celcium);
+          C_TEMP, rtc.readnvram(SUBSTRATE_TEMP), C_CELCIUM);
         break;
       case 8:
         fprintf_P(&lcd_out, PSTR("Light: %c %4dlux"),
-          char_lamp, rtc.readnvram(LIGHT));
+          C_LAMP, rtc.readnvram(LIGHT));
         break;
       case 12:
         fprintf_P(&lcd_out, PSTR("Computer:  %c %2d%c"),
-          char_temp, rtc.readnvram(COMPUTER_TEMP), char_celcium);
+          C_TEMP, rtc.readnvram(COMPUTER_TEMP), C_CELCIUM);
         break;
     }
     homeScreenItem++;
+  }
+
+  void clockScreen() {
+    uint8_t hour = clock.hour();
+    uint8_t minute = clock.minute();
+    uint8_t day = clock.day();
+    uint8_t month = clock.month();
+    uint16_t year = clock.year();
+    // show clock
+    if(editMode == false) {
+      fprintf_P(&lcd_out, PSTR("Time:   %02d:%02d:%02d\nDate: %02d-%02d-%4d"), 
+        hour, minute, clock.second(), day, month, year);
+      return;
+    }
+    // edit mode
+    fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d"), 
+      hour, minute, day, month, year);
+    storage.changed = false;
+    uint8_t blinkFrom, blinkTo;
+    switch (menuItem) {
+      case true:
+        editMode = 7;
+      case 7:
+        hour += nextItem;
+        if(hour > 23)
+          hour = 0;
+        blinkFrom = 0;
+        blinkTo = 1;
+        break;
+      case 6:
+        minute += nextItem;
+        if(minute > 59)
+          minute = 0;
+        blinkFrom = 3;
+        blinkTo = 4;
+        break;
+      case 5:
+        day += nextItem;
+        if(1 < day || day > 31)
+          day = 1;
+        blinkFrom = 6;
+        blinkTo = 7;
+        break;
+      case 4:
+        month += nextItem;
+        if(1 < month || month > 12)
+          month = 1;  
+        blinkFrom = 9;
+        blinkTo = 10;
+        break;
+      case 3:
+        year += nextItem;
+        if(2014 < year || year > 2024)
+          year = 2014;
+        blinkFrom = 12;
+        blinkTo = 15;
+        break;
+    }
+    textBlinkPos(1, blinkFrom, blinkTo);
+    clock = DateTime(year, month, day, hour, minute);
   }
 
   void menuPeriod(const char * __fmt, uint8_t * _period) {
@@ -429,7 +430,7 @@ private:
     switch (rtc.readnvram(WARNING)) { 
       case WARNING_SUBSTRATE_LOW:
         fprintf_P(&lcd_out, PSTR("Low substrate!  \n{Please add some!}"));
-        melody.beep(1);
+        beep.play(1);
         return;
       case INFO_SUBSTRATE_FULL:
         fprintf_P(&lcd_out, PSTR("Substrate tank  \nis full! :)))   "));
@@ -446,25 +447,25 @@ private:
         return;
       case WARNING_AIR_COLD:
         fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! {:(}  "));
-        melody.beep(1);
+        beep.play(1);
         return;
       case WARNING_AIR_HOT:
         fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! {:(}  "));
-        melody.beep(1);
+        beep.play(1);
         return;
       case WARNING_SUBSTRATE_COLD:
         fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! {:(}        "));
-        melody.beep(2);
+        beep.play(2);
         return;
       case WARNING_NO_WATER:
         fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! {:(}    "));
-        melody.beep(1);
+        beep.play(1);
         return;
     }  
   }
 
   void showAlert() {
-    melody.beep(5);
+    beep.play(5);
     backlightBlink(1);
     textBlink = true;
     lcd.home();

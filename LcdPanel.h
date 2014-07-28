@@ -22,7 +22,7 @@ void leftButtonClick() {
 }
 
 void buttonsLongPress() {
-  melody.beep(2);
+  beep.play(2);
   if(menu.editMode > 0) {
     // move to next edit field
     menu.editMode--;
@@ -39,21 +39,16 @@ void buttonsLongPress() {
   menu.showMenu();
 }
 
-// Declare buttons events
-void buttons_init() {
-  // Configure buttons
-  rightButton.attachClick( rightButtonClick );
-  rightButton.attachLongPressStart( buttonsLongPress );
-  leftButton.attachClick( leftButtonClick );
-  leftButton.attachLongPressStart( buttonsLongPress );
-}
 
 class LcdPanel 
 {
 public:
   void begin() {
     // init buttons
-    buttons_init();
+    rightButton.attachClick( rightButtonClick );
+    rightButton.attachLongPressStart( buttonsLongPress );
+    leftButton.attachClick( leftButtonClick );
+    leftButton.attachLongPressStart( buttonsLongPress );
     // init menu
     menu.begin();
   }

@@ -11,7 +11,7 @@ static const uint8_t EEPROM_SIZE = 255;
 // prevent burn memory
 static const uint8_t MAX_WRITES = 20;
 // Declare EEPROM values
-#define SETTINGS_ID  "a"
+#define SETTINGS_ID  "&"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDuration, wateringSunnyPeriod, wateringNightPeriod, wateringOtherPeriod;
@@ -20,13 +20,18 @@ struct SettingsStruct {
   uint8_t humidMinimum, humidMaximum; 
   uint8_t airTempMinimum, airTempMaximum, subsTempMinimum;
   char id[2];
+  uint8_t c_celcium[8], c_heart[8], c_humidity[8];
+  uint8_t c_temp[8], c_flower[8], c_lamp[8];
 } settings = {
   15, 90, 0, 120,
   3, 120, 0, 60,
   700, 300, 14,
   50, 75,
   17, 35, 15,
-  SETTINGS_ID
+  SETTINGS_ID,
+  {24, 24, 3, 4, 4, 4, 3, 0}, {0, 10, 21, 17, 10, 4, 0, 0}, 
+  {4, 10, 10, 17, 17, 17, 14, 0}, {4, 10, 10, 14, 31, 31, 14, 0},
+  {14, 27, 21, 14, 4, 12, 4, 0}, {14, 17, 17, 17, 14, 14, 4, 0}
 }, test;
 
 
@@ -36,7 +41,7 @@ class EEPROM
     bool changed;
     bool ok;
 
-    bool load() {
+    void load() {
       address_offset = 0;
       // search through the EEPROM for a valid structure
       while(address_offset < (EEPROM_SIZE-sizeof(settings))) { 
@@ -51,7 +56,7 @@ class EEPROM
             address_offset);
           #endif
           ok = true;
-          return true;
+          return;
 	      }
         address_offset++;
       }
@@ -63,10 +68,9 @@ class EEPROM
       changed = true; 
       save();
       ok = false;
-      return false;
     }
 
-    bool save() {
+    void save() {
       // prevent to burn EEPROM
       if(writes_count >= MAX_WRITES) {
         #ifdef DEBUG_EEPROM
@@ -74,7 +78,7 @@ class EEPROM
             MAX_WRITES);
         #endif
         ok = false;
-        return false;
+        return;
       }
       // move on store position
       #ifdef EEPROM_OFFSET 
@@ -93,7 +97,7 @@ class EEPROM
         changed = false;
       } else {
         ok = true;
-        return true;
+        return;
       }
 
       if(updateCount == sizeof(settings)) {
@@ -102,14 +106,13 @@ class EEPROM
             address_offset);
         #endif
         ok = true;
-        return true;
+        return;
       }
       #ifdef DEBUG_EEPROM
         printf_P(PSTR("EEPROM: Error: Settings isn't saved at %d address!\n\r"), 
           address_offset);
       #endif
       ok = false;
-      return false;
     }
 
   private:
@@ -139,8 +142,8 @@ class EEPROM
       }
       writes_count += writeCount;
       #ifdef DEBUG_EEPROM
-        printf_P(PSTR("EEPROM: Warning: Writed %d bytes!\n\r"), writeCount);
-        printf_P(PSTR("EEPROM: Info: %d bytes not changed!\n\r"), skipCount);
+        printf_P(PSTR("EEPROM: Warning: Writed %d bytes and %d bytes not changed!\n\r"), 
+          writeCount, skipCount);
       #endif
       return writeCount + skipCount;
     }
