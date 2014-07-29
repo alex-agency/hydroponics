@@ -137,6 +137,7 @@ public:
           showAlert();
         else if(rtc.readnvram(WARNING) != NO_WARNING)
           showWarning();
+        return;
       } else
       // 30 sec after click
       if(lastTouch+30 < lastUpdate && 
@@ -159,7 +160,7 @@ public:
       showMenu();
     }
     // update beep
-    beep.update();
+    //beep.update();
   }
 
   void showMenu() {
@@ -184,6 +185,8 @@ public:
       // enable blink for edit mode
       textBlink = true;
     }
+    if(menuItem != HOME)
+      homeScreenItem = 0;
     // print menu
     lcd.home();
     switch (menuItem) {
@@ -196,15 +199,15 @@ public:
         break;
       case WATERING_SUNNY:
         menuPeriod(PSTR("Watering sunny  \n"), 
-          &(settings.wateringSunnyPeriod += nextItem));
+          (settings.wateringSunnyPeriod += nextItem));
         break;
       case WATERING_NIGHT:
         menuPeriod(PSTR("Watering night  \n"), 
-          &(settings.wateringNightPeriod += nextItem));
+          (settings.wateringNightPeriod += nextItem));
         break;
       case WATERING_OTHER:
         menuPeriod(PSTR("Watering evening\n"), 
-          &(settings.wateringOtherPeriod += nextItem));
+          (settings.wateringOtherPeriod += nextItem));
         break;
       case MISTING_DURATION:
         fprintf_P(&lcd_out, PSTR("Misting duration\nfor {%2d} sec      "), 
@@ -212,15 +215,15 @@ public:
         break;
       case MISTING_SUNNY:
         menuPeriod(PSTR("Misting sunny   \n"),
-          &(settings.mistingSunnyPeriod += nextItem));
+          (settings.mistingSunnyPeriod += nextItem));
         break;
       case MISTING_NIGHT:
         menuPeriod(PSTR("Misting night   \n"), 
-          &(settings.mistingNightPeriod += nextItem));
+          (settings.mistingNightPeriod += nextItem));
         break;
       case MISTING_OTHER:
         menuPeriod(PSTR("Misting evening \n"), 
-          &(settings.mistingOtherPeriod += nextItem));
+          (settings.mistingOtherPeriod += nextItem));
         break;
       case LIGHT_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Light not less  \nthan {%4d} lux   "), 
@@ -238,7 +241,7 @@ public:
             (settings.lightDayStart/60)+settings.lightDayDuration, 
             settings.lightDayStart%60);
         } else {
-          fprintf_P(&lcd_out, PSTR("day start at {%2d}h"), 
+          fprintf_P(&lcd_out, PSTR("{%2d} o'clock      "), 
             (settings.lightDayStart += nextItem)/60);
         }
         break;
@@ -299,7 +302,6 @@ public:
         break;
       default:
         menuItem = HOME;
-        homeScreenItem = 0;
         break;
     }
     nextItem = 0;
@@ -367,11 +369,11 @@ private:
       return;
     }
     // edit mode
-    fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d"), 
+    fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d}"), 
       hour, minute, day, month, year);
     storage.changed = false;
     uint8_t blinkFrom, blinkTo;
-    switch (menuItem) {
+    switch (editMode) {
       case true:
         editMode = 7;
       case 7:
@@ -390,21 +392,21 @@ private:
         break;
       case 5:
         day += nextItem;
-        if(1 < day || day > 31)
+        if(day < 1 || day > 31)
           day = 1;
         blinkFrom = 6;
         blinkTo = 7;
         break;
       case 4:
         month += nextItem;
-        if(1 < month || month > 12)
+        if(month < 1 || month > 12)
           month = 1;  
         blinkFrom = 9;
         blinkTo = 10;
         break;
       case 3:
         year += nextItem;
-        if(2014 < year || year > 2024)
+        if(year < 2014 || year > 2024)
           year = 2014;
         blinkFrom = 12;
         blinkTo = 15;
@@ -414,7 +416,7 @@ private:
     clock = DateTime(year, month, day, hour, minute);
   }
 
-  void menuPeriod(const char * __fmt, uint8_t * _period) {
+  void menuPeriod(const char * __fmt, uint8_t _period) {
     fprintf_P(&lcd_out, __fmt);
     if(_period > 0 || editMode > 0) {
       fprintf_P(&lcd_out, PSTR("every {%3d} min   "), _period); 

@@ -229,7 +229,7 @@ bool read_BH1750() {
 void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
-  if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
+  /*if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     rtc.writenvram(ERROR, ERROR_NO_SUBSTRATE);
     return;
   }
@@ -253,7 +253,7 @@ void check_levels() {
     }
   } else {
   	substTankFull = false;
-  }
+  }*/
 }
 
 void relayOn(uint8_t relay) {
@@ -307,9 +307,9 @@ bool relays(uint8_t relay, uint8_t state) {
 }
 
 void check() {
-  #ifdef DEBUG
+  //#ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
-  #endif
+  //#endif
   // check memory
   if(freeMemory() < 600) {
     rtc.writenvram(ERROR, ERROR_LOW_MEMORY);
@@ -321,25 +321,25 @@ void check() {
     return;
   }
   // read DHT sensor
-  if(read_DHT() == false) {
+  /*if(read_DHT() == false) {
     rtc.writenvram(ERROR, ERROR_DHT);
     return;
-  }
+  }*/
   // read BH1750 sensor
   if(read_BH1750() == false) {
     rtc.writenvram(ERROR, ERROR_BH1750);
     return;
   }
   // read DS18B20 sensors
-  if(read_DS18B20() == false) {
+  /*if(read_DS18B20() == false) {
     rtc.writenvram(ERROR, ERROR_DS18B20);
     return;
-  }
+  }*/
   // reset error
   rtc.writenvram(ERROR, NO_ERROR);
 
   // check substrate temperature
-  if(rtc.readnvram(SUBSTRATE_TEMP) <= settings.subsTempMinimum) {
+  /*if(rtc.readnvram(SUBSTRATE_TEMP) <= settings.subsTempMinimum) {
     rtc.writenvram(WARNING, WARNING_SUBSTRATE_COLD);
     return;
   }
@@ -351,7 +351,7 @@ void check() {
     return;
   } else if(rtc.readnvram(AIR_TEMP) >= settings.airTempMaximum) {
     rtc.writenvram(WARNING, WARNING_AIR_HOT);
-  }
+  }*/
   // reset warning
   rtc.writenvram(WARNING, NO_WARNING);
 }
