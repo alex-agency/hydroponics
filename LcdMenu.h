@@ -2,6 +2,7 @@
 #define LCDMENU_H
 
 #include "LiquidCrystal_I2C.h"
+#include "SimpleMap.h"
 #include "Settings.h"
 #include "RTClib.h"
 #include "Beep.h"
@@ -41,6 +42,9 @@ EEPROM storage;
 // Declare RTC
 RTC_DS1307 rtc;
 DateTime clock;
+
+// Declare state map
+SimpleMap<uint8_t, uint16_t, 11> states;
 
 // Declare custom LCD characters
 static const uint8_t C_CELCIUM = 0;
@@ -88,7 +92,7 @@ static const uint8_t ERROR_DHT = 12;
 static const uint8_t ERROR_BH1750 = 13;
 static const uint8_t ERROR_DS18B20 = 14;
 static const uint8_t ERROR_NO_SUBSTRATE = 15;
-// Declare constants
+// Declare state map keys constants
 static const uint8_t HUMIDITY = 2; // air humidity
 static const uint8_t AIR_TEMP = 3;
 static const uint8_t COMPUTER_TEMP = 4; // temperature inside
@@ -107,6 +111,7 @@ public:
   uint8_t editMode;
   uint8_t menuItem;
   int nextItem;
+  uint16_t tick; // delete it
 
   void begin() {
     // Load settings
@@ -133,9 +138,9 @@ public:
       lastUpdate = now;
       // 10 sec after click
       if(lastTouch+10 < lastUpdate) {
-        if(rtc.readnvram(ERROR) != NO_ERROR)
+        if(states[ERROR] != NO_ERROR)
           showAlert();
-        else if(rtc.readnvram(WARNING) != NO_WARNING)
+        else if(states[WARNING] != NO_WARNING)
           showWarning();
         return;
       } else
@@ -148,7 +153,7 @@ public:
       } else
       // 5 min after click
       if(lastTouch+300 < lastUpdate && 
-          rtc.readnvram(WARNING) == NO_WARNING &&
+          states[WARNING] == NO_WARNING &&
           lcd.isBacklight()) {
         // switch off backlight
         lcd.setBacklight(false);
@@ -158,6 +163,7 @@ public:
         clock = rtc.now();
       // update LCD
       showMenu();
+      printf_P(PSTR("lcd menu tick: %d\n\r"), tick++); // delete it
     }
     // update beep
     //beep.update();
@@ -337,20 +343,20 @@ private:
     switch (homeScreenItem) {
       case 0:
         fprintf_P(&lcd_out, PSTR("Air: %c %2d%c %c %2d%%"),
-          C_TEMP, rtc.readnvram(AIR_TEMP), C_CELCIUM, C_HUMIDITY, 
-          rtc.readnvram(HUMIDITY));
+          C_TEMP, states[AIR_TEMP], C_CELCIUM, C_HUMIDITY, 
+          states[HUMIDITY]);
         break;
       case 4:
         fprintf_P(&lcd_out, PSTR("Substrate: %c %2d%c"),
-          C_TEMP, rtc.readnvram(SUBSTRATE_TEMP), C_CELCIUM);
+          C_TEMP, states[SUBSTRATE_TEMP], C_CELCIUM);
         break;
       case 8:
         fprintf_P(&lcd_out, PSTR("Light: %c %4dlux"),
-          C_LAMP, rtc.readnvram(LIGHT));
+          C_LAMP, states[LIGHT]);
         break;
       case 12:
         fprintf_P(&lcd_out, PSTR("Computer:  %c %2d%c"),
-          C_TEMP, rtc.readnvram(COMPUTER_TEMP), C_CELCIUM);
+          C_TEMP, states[COMPUTER_TEMP], C_CELCIUM);
         break;
     }
     homeScreenItem++;
@@ -429,7 +435,7 @@ private:
     lcd.setBacklight(true);
     textBlink = true;
     lcd.home();
-    switch (rtc.readnvram(WARNING)) { 
+    switch (states[WARNING]) { 
       case WARNING_SUBSTRATE_LOW:
         fprintf_P(&lcd_out, PSTR("Low substrate!  \n{Please add some!}"));
         beep.play(1);
@@ -471,7 +477,7 @@ private:
     backlightBlink(1);
     textBlink = true;
     lcd.home();
-    switch (rtc.readnvram(ERROR)) {
+    switch (states[ERROR]) {
       case ERROR_LOW_MEMORY:
         fprintf_P(&lcd_out, PSTR("MEMORY ERROR!   \n{Low memory!}     "));
         return;

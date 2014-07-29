@@ -12,6 +12,8 @@
 #include "RF24Layer2.h"
 #include "MeshNet.h"
 
+#define DEBUG
+
 // Declare output
 static int serial_putchar(char c, FILE *) {
   Serial.write(c);
@@ -110,27 +112,29 @@ void loop()
         storage.changed = false;
       }
       // send data to base
-      sendCommand( 1, (void*) &"Hydroponica", sizeof("Hydroponica") );
-      sendCommand( HUMIDITY, (void*) rtc.readnvram(HUMIDITY), 
-        sizeof(rtc.readnvram(HUMIDITY)) );
-      sendCommand( AIR_TEMP, (void*) rtc.readnvram(AIR_TEMP), 
-        sizeof(rtc.readnvram(AIR_TEMP)) );
-      sendCommand( COMPUTER_TEMP, (void*) rtc.readnvram(COMPUTER_TEMP),
-        sizeof(rtc.readnvram(COMPUTER_TEMP)) );
-      sendCommand( SUBSTRATE_TEMP, (void*) rtc.readnvram(SUBSTRATE_TEMP), 
-        sizeof(rtc.readnvram(SUBSTRATE_TEMP)) );    
-      sendCommand( LIGHT, (void*) rtc.readnvram(LIGHT), 
-        sizeof(rtc.readnvram(LIGHT)) );
-      sendCommand( PUMP_MISTING, (void*) rtc.readnvram(PUMP_MISTING), 
-        sizeof(rtc.readnvram(PUMP_MISTING)) );
-      sendCommand( PUMP_WATERING, (void*) rtc.readnvram(PUMP_WATERING), 
-        sizeof(rtc.readnvram(PUMP_WATERING)) );
-      sendCommand( LAMP, (void*) rtc.readnvram(LAMP), 
-        sizeof(rtc.readnvram(LAMP)) );
-      sendCommand( WARNING, (void*) rtc.readnvram(WARNING), 
-        sizeof(rtc.readnvram(WARNING)) );
-      sendCommand( ERROR, (void*) rtc.readnvram(ERROR), 
-        sizeof(rtc.readnvram(ERROR)) );
+      sendCommand( 2, (void*) &states, sizeof(states) );
+
+      /*sendCommand( 1, (void*) &"Hydroponics", sizeof("Hydroponics") );
+      sendCommand( HUMIDITY, (void*) states[HUMIDITY], 
+        sizeof(states[HUMIDITY]) );
+      sendCommand( AIR_TEMP, (void*) states[AIR_TEMP], 
+        sizeof(states[AIR_TEMP]) );
+      sendCommand( COMPUTER_TEMP, (void*) states[COMPUTER_TEMP],
+        sizeof(states[COMPUTER_TEMP]) );
+      sendCommand( SUBSTRATE_TEMP, (void*) states[SUBSTRATE_TEMP], 
+        sizeof(states[SUBSTRATE_TEMP]) );
+      sendCommand( LIGHT, (void*) states[LIGHT], 
+        sizeof(states[LIGHT]) );
+      sendCommand( PUMP_MISTING, (void*) states[PUMP_MISTING], 
+        sizeof(states[PUMP_MISTING]) );
+      sendCommand( PUMP_WATERING, (void*) states[PUMP_WATERING], 
+        sizeof(states[PUMP_WATERING]) );
+      sendCommand( LAMP, (void*) states[LAMP], 
+        sizeof(states[LAMP]) );
+      sendCommand( WARNING, (void*) states[WARNING], 
+        sizeof(states[WARNING]) );
+      sendCommand( ERROR, (void*) states[ERROR], 
+        sizeof(states[ERROR]) );*/
     }
   }
   // update LCD 
@@ -163,10 +167,10 @@ void onCommandReceived(uint8_t command, void* data, uint8_t dataLen) {
 bool read_DHT() {
   DHT dht(DHTPIN, DHTTYPE);
   dht.begin();
-  rtc.writenvram(HUMIDITY, dht.readHumidity());
-  rtc.writenvram(AIR_TEMP, dht.readTemperature());
+  states[HUMIDITY] = dht.readHumidity();
+  states[AIR_TEMP] = dht.readTemperature();
 
-  if( isnan(rtc.readnvram(HUMIDITY)) || isnan(rtc.readnvram(AIR_TEMP)) ) {
+  if( isnan(states[HUMIDITY]) || isnan(states[AIR_TEMP]) ) {
     #ifdef DEBUG_DHT11
       printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
     #endif
@@ -174,7 +178,7 @@ bool read_DHT() {
   }
   #ifdef DEBUG_DHT11
     printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
-      rtc.readnvram(HUMIDITY), rtc.readnvram(AIR_TEMP));
+      states[HUMIDITY], states[AIR_TEMP]);
   #endif
   return true;
 }
@@ -192,7 +196,7 @@ bool read_DS18B20() {
   #ifdef DEBUG_DS18B20
     printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
   #endif
-  rtc.writenvram(COMPUTER_TEMP, value);
+  states[COMPUTER_TEMP] = value;
 
   value = ds.read(1);
   if(value == DS_DISCONNECTED) {
@@ -204,14 +208,14 @@ bool read_DS18B20() {
   #ifdef DEBUG_DS18B20
     printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
   #endif
-  rtc.writenvram(SUBSTRATE_TEMP, value);
+  states[SUBSTRATE_TEMP] = value;
   return true;
 }
 
 bool read_BH1750() {
   BH1750 lightMeter;
   lightMeter.begin(BH1750_ONE_TIME_HIGH_RES_MODE_2);
-  uint16_t value = lightMeter.readLightLevel();
+  int value = lightMeter.readLightLevel();
 
   if(value < 0) {
     #ifdef DEBUG_BH1750
@@ -222,7 +226,7 @@ bool read_BH1750() {
   #ifdef DEBUG_BH1750
     printf_P(PSTR("BH1750: Info: Light intensity: %d.\n\r"), value);
   #endif
-  rtc.writenvram(LIGHT, value);
+  states[LIGHT] = value;
   return true;
 }
 
@@ -230,25 +234,25 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   /*if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    rtc.writenvram(ERROR, ERROR_NO_SUBSTRATE);
+    states[ERROR, ERROR_NO_SUBSTRATE);
     return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
-    rtc.writenvram(WARNING, INFO_SUBSTRATE_DELIVERED);
+    states[WARNING, INFO_SUBSTRATE_DELIVERED);
     return;
   }
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
   if(analogRead(WATER_LEVELPIN) > 700) {
-    rtc.writenvram(WARNING, WARNING_NO_WATER);
+    states[WARNING, WARNING_NO_WATER);
     return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_FULLPIN) == 1) { 	  
   	if(substTankFull == false) {
       substTankFull = true;
-      rtc.writenvram(WARNING, INFO_SUBSTRATE_FULL);
+      states[WARNING, INFO_SUBSTRATE_FULL);
       return;
     }
   } else {
@@ -257,7 +261,7 @@ void check_levels() {
 }
 
 void relayOn(uint8_t relay) {
-  if(rtc.readnvram(relay)) {
+  if(states[relay]) {
     // relay is already on
     return;
   }
@@ -266,12 +270,12 @@ void relayOn(uint8_t relay) {
     #ifdef DEBUG_RELAY
       printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay);
     #endif
-    rtc.writenvram(relay, true);
+    states[relay] = true;
   }
 }
 
 void relayOff(uint8_t relay) {
-  if(rtc.readnvram(relay) == false) {
+  if(states[relay] == false) {
     // relay is already off
     return;
   }
@@ -280,7 +284,7 @@ void relayOff(uint8_t relay) {
     #ifdef DEBUG_RELAY
       printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay);
     #endif
-    rtc.writenvram(relay, false);
+    states[relay] = false;
   }
 }
 
@@ -307,70 +311,70 @@ bool relays(uint8_t relay, uint8_t state) {
 }
 
 void check() {
-  //#ifdef DEBUG
+  #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
-  //#endif
+  #endif
   // check memory
   if(freeMemory() < 600) {
-    rtc.writenvram(ERROR, ERROR_LOW_MEMORY);
+    states[ERROR] = ERROR_LOW_MEMORY;
     return;
   }
   // check EEPROM
   if(storage.ok == false) {
-    rtc.writenvram(ERROR, ERROR_EEPROM);
+    states[ERROR] = ERROR_EEPROM;
     return;
   }
   // read DHT sensor
   /*if(read_DHT() == false) {
-    rtc.writenvram(ERROR, ERROR_DHT);
+    states[ERROR, ERROR_DHT);
     return;
   }*/
   // read BH1750 sensor
   if(read_BH1750() == false) {
-    rtc.writenvram(ERROR, ERROR_BH1750);
+    states[ERROR] = ERROR_BH1750;
     return;
   }
   // read DS18B20 sensors
   /*if(read_DS18B20() == false) {
-    rtc.writenvram(ERROR, ERROR_DS18B20);
+    states[ERROR, ERROR_DS18B20);
     return;
   }*/
   // reset error
-  rtc.writenvram(ERROR, NO_ERROR);
+  states[ERROR] = NO_ERROR;
 
   // check substrate temperature
-  /*if(rtc.readnvram(SUBSTRATE_TEMP) <= settings.subsTempMinimum) {
-    rtc.writenvram(WARNING, WARNING_SUBSTRATE_COLD);
+  /*if(states[SUBSTRATE_TEMP) <= settings.subsTempMinimum) {
+    states[WARNING, WARNING_SUBSTRATE_COLD);
     return;
   }
   // check air temperature
-  if(rtc.readnvram(AIR_TEMP) <= settings.airTempMinimum && 
+  if(states[AIR_TEMP) <= settings.airTempMinimum && 
       // prevent nightly alarm
       clock.hour() >= 7) {
-    rtc.writenvram(WARNING, WARNING_AIR_COLD);
+    states[WARNING, WARNING_AIR_COLD);
     return;
-  } else if(rtc.readnvram(AIR_TEMP) >= settings.airTempMaximum) {
-    rtc.writenvram(WARNING, WARNING_AIR_HOT);
+  } else if(states[AIR_TEMP) >= settings.airTempMaximum) {
+    states[WARNING, WARNING_AIR_HOT);
   }*/
   // reset warning
-  rtc.writenvram(WARNING, NO_WARNING);
+  states[WARNING] = NO_WARNING;
 }
 
 void doWork() {
   // don't do any work while error
-  if(rtc.readnvram(ERROR) != NO_ERROR) {
+  if(states[ERROR] != NO_ERROR) {
     return;
   }
   uint8_t speed = 60; // sec per min
   // check humidity
-  if(rtc.readnvram(HUMIDITY) <= settings.humidMinimum) {
+  if(states[HUMIDITY] <= settings.humidMinimum) {
     speed /= 2; // do work twice often
-  } else if(rtc.readnvram(HUMIDITY) >= settings.humidMaximum) {
+  } else if(states[HUMIDITY] >= settings.humidMaximum) {
     speed *= 2; // do work twice rarely
   }
   // sunny time (11-16 o'clock) + light
   if(11 <= clock.hour() && clock.hour() < 16 && 
-      rtc.readnvram(LIGHT) >= 2500) {
+      states[LIGHT] >= 2500) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
@@ -380,7 +384,7 @@ void doWork() {
   }
   // night time (20-8 o'clock) + light
   if((20 <= clock.hour() || clock.hour() < 8) && 
-      rtc.readnvram(LIGHT) <= settings.lightMinimum) {
+      states[LIGHT] <= settings.lightMinimum) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
@@ -405,8 +409,8 @@ void checkMistingPeriod(uint8_t _period, uint8_t _time) {
 
 void doLight() { 
   // try to up temperature
-  if(rtc.readnvram(AIR_TEMP) <= settings.airTempMinimum &&
-      rtc.readnvram(LIGHT) > 100) {
+  if(states[AIR_TEMP] <= settings.airTempMinimum &&
+      states[LIGHT] > 100) {
     // turn on lamp
     relayOn(LAMP);
     return;
@@ -414,7 +418,7 @@ void doLight() {
   uint16_t dtime = clock.hour()*60+clock.minute();
 
   // light enough
-  if(rtc.readnvram(LIGHT) > settings.lightMinimum) {
+  if(states[LIGHT] > settings.lightMinimum) {
     // turn off lamp
     relayOff(LAMP);
     
@@ -459,22 +463,22 @@ void doLight() {
 
 void misting() {
   if(startMisting == 0 || 
-      rtc.readnvram(WARNING) == WARNING_NO_WATER) {
+      states[WARNING] == WARNING_NO_WATER) {
     // stop misting
-    if(rtc.readnvram(PUMP_MISTING)) {
+    if(states[PUMP_MISTING]) {
       #ifdef DEBUG
         printf_P(PSTR("Misting: Info: Stop misting.\n\r"));
       #endif
       relayOff(PUMP_MISTING);
-      if(rtc.readnvram(WARNING) == WARNING_MISTING)
-        rtc.writenvram(WARNING, NO_WARNING);
+      if(states[WARNING] == WARNING_MISTING)
+        states[WARNING] = NO_WARNING;
     }
     return;
   }
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Misting...\n\r"));
   #endif
-  rtc.writenvram(WARNING, WARNING_MISTING);
+  states[WARNING] = WARNING_MISTING;
   startMisting--;
   lastMisting = millis()/1000;
   relayOn(PUMP_MISTING);
@@ -482,25 +486,25 @@ void misting() {
 
 void watering() {
   if(startWatering == 0 && 
-  	  rtc.readnvram(PUMP_WATERING) == false) {
+  	  states[PUMP_WATERING] == false) {
     return;
   }
   bool timeIsOver = startWatering + (settings.wateringDuration*60) <= millis()/1000;
   // stop watering
-  if(rtc.readnvram(WARNING) == INFO_SUBSTRATE_DELIVERED && timeIsOver) {
+  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED && timeIsOver) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
     #endif
     relayOff(PUMP_WATERING);
     startWatering = 0;
-    if(rtc.readnvram(WARNING) == WARNING_WATERING)
-      rtc.writenvram(WARNING, NO_WARNING);
+    if(states[WARNING] == WARNING_WATERING)
+      states[WARNING] = NO_WARNING;
     return;
   }
   // emergency stop
-  if(timeIsOver || rtc.readnvram(ERROR) == ERROR_NO_SUBSTRATE) {
+  if(timeIsOver || states[ERROR] == ERROR_NO_SUBSTRATE) {
     relayOff(PUMP_WATERING);
-    rtc.writenvram(WARNING, WARNING_SUBSTRATE_LOW);
+    states[WARNING] = WARNING_SUBSTRATE_LOW;
     startWatering = 0;
     #ifdef DEBUG
       printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
@@ -509,7 +513,7 @@ void watering() {
   }
   // set pause for cleanup pump and rest
   uint8_t pauseDuration = 5;
-  if(rtc.readnvram(WARNING) == INFO_SUBSTRATE_DELIVERED)
+  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 10;
   // pause every 30 sec
   if((millis()/1000-startWatering) % 30 <= pauseDuration) {
@@ -522,7 +526,7 @@ void watering() {
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
-  rtc.writenvram(WARNING, WARNING_WATERING);
+  states[WARNING] = WARNING_WATERING;
   lastWatering = millis()/1000;
   relayOn(PUMP_WATERING);
 }
