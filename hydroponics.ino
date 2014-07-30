@@ -46,6 +46,7 @@ uint16_t sunrise = 0;
 uint8_t startMisting = 0;
 uint16_t startWatering = 0;
 bool substTankFull = false;
+
 // Define pins
 static const uint8_t DHTPIN = 3;
 static const uint8_t ONE_WIRE_BUS = 2;
@@ -88,8 +89,9 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  if((millis()/1000) - timerFast >= 1) {
-    timerFast = millis()/1000;
+  uint16_t now = millis()/1000;
+  if(now - timerFast >= 1) {
+    timerFast = now;
     // check level sensors
     check_levels();
     // update watering
@@ -97,8 +99,8 @@ void loop()
     // update misting
     misting();
     // timer fo 1 min
-    if((millis()/1000) - timerSlow >= 60) {
-      timerSlow = millis()/1000;
+    if(now - timerSlow >= 60) {
+      timerSlow = now;
       // system check
       check();
       // manage light
@@ -112,8 +114,7 @@ void loop()
         storage.changed = false;
       }
       // send data to base
-      sendCommand( 2, (void*) &states, sizeof(states) );
-
+      sendCommand( 1, (void*) &states, sizeof(states) );
       /*sendCommand( 1, (void*) &"Hydroponics", sizeof("Hydroponics") );
       sendCommand( HUMIDITY, (void*) states[HUMIDITY], 
         sizeof(states[HUMIDITY]) );
@@ -150,6 +151,9 @@ int sendPacket(uint8_t* message, uint8_t len,
     uint8_t interface, uint8_t macAddress) {  
   // Here should be called the layer2 function corresponding to interface
   if(interface == RF24_INTERFACE) {
+    #ifdef DEBUG_MESH
+      printf_P(PSTR("MESH: INFO: Sending %d byte to %d\n\r"), len, macAddress);
+    #endif
     rf24sendPacket(message, len, macAddress);
     return 1;
   }
@@ -234,25 +238,25 @@ void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   /*if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    states[ERROR, ERROR_NO_SUBSTRATE);
+    states[ERROR] = ERROR_NO_SUBSTRATE;
     return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
-    states[WARNING, INFO_SUBSTRATE_DELIVERED);
+    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
     return;
   }
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
   if(analogRead(WATER_LEVELPIN) > 700) {
-    states[WARNING, WARNING_NO_WATER);
+    states[WARNING] = WARNING_NO_WATER;
     return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
   if(digitalRead(SUBSTRATE_FULLPIN) == 1) { 	  
   	if(substTankFull == false) {
       substTankFull = true;
-      states[WARNING, INFO_SUBSTRATE_FULL);
+      states[WARNING] = INFO_SUBSTRATE_FULL;
       return;
     }
   } else {
@@ -326,7 +330,7 @@ void check() {
   }
   // read DHT sensor
   /*if(read_DHT() == false) {
-    states[ERROR, ERROR_DHT);
+    states[ERROR] = ERROR_DHT;
     return;
   }*/
   // read BH1750 sensor
@@ -336,25 +340,25 @@ void check() {
   }
   // read DS18B20 sensors
   /*if(read_DS18B20() == false) {
-    states[ERROR, ERROR_DS18B20);
+    states[ERROR] = ERROR_DS18B20;
     return;
   }*/
   // reset error
   states[ERROR] = NO_ERROR;
 
   // check substrate temperature
-  /*if(states[SUBSTRATE_TEMP) <= settings.subsTempMinimum) {
-    states[WARNING, WARNING_SUBSTRATE_COLD);
+  /*if(states[SUBSTRATE_TEMP] <= settings.subsTempMinimum) {
+    states[WARNING] = WARNING_SUBSTRATE_COLD;
     return;
   }
   // check air temperature
-  if(states[AIR_TEMP) <= settings.airTempMinimum && 
+  if(states[AIR_TEMP] <= settings.airTempMinimum && 
       // prevent nightly alarm
       clock.hour() >= 7) {
-    states[WARNING, WARNING_AIR_COLD);
+    states[WARNING = WARNING_AIR_COLD;
     return;
-  } else if(states[AIR_TEMP) >= settings.airTempMaximum) {
-    states[WARNING, WARNING_AIR_HOT);
+  } else if(states[AIR_TEMP] >= settings.airTempMaximum) {
+    states[WARNING] = WARNING_AIR_HOT;
   }*/
   // reset warning
   states[WARNING] = NO_WARNING;
@@ -489,7 +493,8 @@ void watering() {
   	  states[PUMP_WATERING] == false) {
     return;
   }
-  bool timeIsOver = startWatering + (settings.wateringDuration*60) <= millis()/1000;
+  uint16_t now = millis()/1000;
+  bool timeIsOver = startWatering + (settings.wateringDuration*60) <= now;
   // stop watering
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED && timeIsOver) {
     #ifdef DEBUG
@@ -516,7 +521,7 @@ void watering() {
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 10;
   // pause every 30 sec
-  if((millis()/1000-startWatering) % 30 <= pauseDuration) {
+  if((now-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -527,6 +532,6 @@ void watering() {
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
   states[WARNING] = WARNING_WATERING;
-  lastWatering = millis()/1000;
+  lastWatering = now;
   relayOn(PUMP_WATERING);
 }

@@ -135,65 +135,74 @@ public:
     // timer fo 1 sec
     if(now - lastUpdate >= 1) {
       lastUpdate = now;
-      // 10 sec after click
-      if(lastTouch+10 < lastUpdate) {
-        if(states[ERROR] != NO_ERROR) {
-          showAlert();
-          return;
-        } else 
-        if(states[WARNING] != NO_WARNING) {
-          showWarning();
-          return;
-        }
-      }
-      // 30 sec after click
-      if(lastTouch+30 < lastUpdate && 
-          menuItem != HOME && 
-          menuItem != TEST) {
-        editMode = 0;
-        menuItem = HOME;
-      }
-      // 5 min after click
-      if(lastTouch+300 < lastUpdate && 
-          states[WARNING] == NO_WARNING &&
-          lcd.isBacklight()) {
-        // switch off backlight
-        lcd.setBacklight(false);
-      }
+      // keep home screen and sleep
+      checkTouch();
+      // update clock      
       if(editMode == 0)
-        // update clock
         clock = rtc.now();
-      // update LCD
+      // update menu
       showMenu();
     }
     // update beep
     beep.update();
   }
 
-  void showMenu() {
+  void checkTouch() {
+    // check button click
     if(nextItem != 0) {
-      beep.play(1);
       lastTouch = millis()/1000;
+      beep.play(1);
       // enable backlight
       if(lcd.isBacklight() == false) {
         lcd.setBacklight(true);
-        return;
+        // reset click
+        nextItem = 0;
       }
+      return;
     }
-    if(editMode == 2)
+    // less 10 sec after touch
+    if(lastTouch+10 > lastUpdate) {
+      return;
+    }
+    // check error
+    if(states[ERROR] != NO_ERROR) {
+      showAlert();
+      return;
+    }
+    // check warnings
+    if(states[WARNING] != NO_WARNING) {
+      showWarning();
+      return;
+    }
+    // less 30 sec after touch
+    if(menuItem == TEST || lastTouch+30 > lastUpdate) {
+      return;
+    }
+    // return to home
+    if(menuItem != HOME) {
+      menuItem = HOME; 
       editMode = false;
-    if(editMode == false) {
+      homeScreenItem = 0;
+    }
+    // 5 min after touch
+    if(lcd.isBacklight() && lastTouch+300 < lastUpdate) {
+      // switch off backlight
+      lcd.setBacklight(false);
+    }
+  }
+
+  void showMenu() {
+    // check edit mode
+    if(editMode == false || editMode == 2) {
       // move forward to next menu
       menuItem += nextItem;
-      // don't settings values
+      // don't change settings
       nextItem = 0;
-      textBlink = false;
+      textBlink, editMode = false;
     } else {
       // enable blink for edit mode
       textBlink = true;
     }
-    if(menuItem != HOME)
-      homeScreenItem = 0;
     // print menu
     lcd.home();
     switch (menuItem) {
@@ -309,6 +318,7 @@ public:
         break;
       default:
         menuItem = HOME;
+        homeScreenItem = 0;
         break;
     }
     nextItem = 0;
