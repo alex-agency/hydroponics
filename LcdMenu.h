@@ -111,7 +111,6 @@ public:
   uint8_t editMode;
   uint8_t menuItem;
   int nextItem;
-  uint16_t tick; // delete it
 
   void begin() {
     // Load settings
@@ -138,35 +137,37 @@ public:
       lastUpdate = now;
       // 10 sec after click
       if(lastTouch+10 < lastUpdate) {
-        if(states[ERROR] != NO_ERROR)
+        if(states[ERROR] != NO_ERROR) {
           showAlert();
-        else if(states[WARNING] != NO_WARNING)
+          return;
+        } else 
+        if(states[WARNING] != NO_WARNING) {
           showWarning();
-        return;
-      } else
+          return;
+        }
+      }
       // 30 sec after click
       if(lastTouch+30 < lastUpdate && 
           menuItem != HOME && 
           menuItem != TEST) {
         editMode = 0;
         menuItem = HOME;
-      } else
+      }
       // 5 min after click
       if(lastTouch+300 < lastUpdate && 
           states[WARNING] == NO_WARNING &&
           lcd.isBacklight()) {
         // switch off backlight
         lcd.setBacklight(false);
-      } else
+      }
       if(editMode == 0)
         // update clock
         clock = rtc.now();
       // update LCD
       showMenu();
-      printf_P(PSTR("lcd menu tick: %d\n\r"), tick++); // delete it
     }
     // update beep
-    //beep.update();
+    beep.update();
   }
 
   void showMenu() {
