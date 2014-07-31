@@ -131,10 +131,9 @@ public:
   }
 
   void update() {
-    uint16_t now = millis()/1000;
     // timer fo 1 sec
-    if(now - lastUpdate >= 1) {
-      lastUpdate = now;
+    if(millis()/1000 - lastUpdate >= 1) {
+      lastUpdate = millis()/1000;
       // keep home screen and sleep
       checkTouch();
       // update clock      
