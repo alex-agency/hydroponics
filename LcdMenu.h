@@ -11,7 +11,7 @@
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // Declare lcd output
 FILE lcd_out = {0};
-static bool charErase, textErase, textBlink = false;
+static bool charErase, textErase, textBlink;
 static int lcd_putchar(char c, FILE *) {
   switch(c) {
     case '\n':
@@ -126,8 +126,6 @@ public:
     lcd.createChar(C_TEMP, settings.c_temp);
     lcd.createChar(C_FLOWER, settings.c_flower);
     lcd.createChar(C_LAMP, settings.c_lamp);
-    // init values
-    lastUpdate, lastTouch = millis()/1000;
   }
 
   void update() {
@@ -147,18 +145,6 @@ public:
   }
 
   void checkTouch() {
-    // check button click
-    if(nextItem != 0) {
-      lastTouch = millis()/1000;
-      beep.play(1);
-      // enable backlight
-      if(lcd.isBacklight() == false) {
-        lcd.setBacklight(true);
-        // reset click
-        nextItem = 0;
-      }
-      return;
-    }
     // less 10 sec after touch
     if(lastTouch+10 > lastUpdate) {
       return;
@@ -191,17 +177,31 @@ public:
   }
 
   void showMenu() {
+    // check button click
+    if(nextItem != 0) {
+      lastTouch = millis()/1000;
+      beep.play(1);
+      // enable backlight
+      if(lcd.isBacklight() == false) {
+        lcd.setBacklight(true);
+        // reset click
+        nextItem = 0;
+        return;
+      }
+    }
     // check edit mode
     if(editMode == false || editMode == 2) {
       // move forward to next menu
       menuItem += nextItem;
       // don't change settings
       nextItem = 0;
-      textBlink, editMode = false;
+      textBlink = false;
+      editMode = false;
     } else {
       // enable blink for edit mode
       textBlink = true;
     }
+
     // print menu
     lcd.home();
     switch (menuItem) {
@@ -299,11 +299,11 @@ public:
             // change settings for test
             settings.lightMinimum = 10000; //lux
             settings.lightDayDuration = 18; //hours
-            settings.mistingSunnyPeriod, 
-            settings.mistingNightPeriod, 
+            settings.mistingSunnyPeriod = 1; 
+            settings.mistingNightPeriod = 1;
             settings.mistingOtherPeriod = 1; //min
-            settings.wateringSunnyPeriod, 
-            settings.wateringNightPeriod,
+            settings.wateringSunnyPeriod = 1;
+            settings.wateringNightPeriod = 1;
             settings.wateringOtherPeriod = 3; //min
 
             settings.wateringDuration = 2; //min

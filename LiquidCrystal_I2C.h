@@ -160,7 +160,6 @@ private:
 	uint8_t _rows;
 	uint8_t _charsize;
 	uint8_t _backlightval;
-	bool _backlight;
 };
 
 #endif // FDB_LIQUID_CRYSTAL_I2C_H

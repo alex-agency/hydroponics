@@ -113,6 +113,7 @@ void loop()
         storage.save();
         storage.changed = false;
       }
+      //meshTest();
       // send data to base
       sendCommand( 1, (void*) &states, sizeof(states) );
       /*sendCommand( 1, (void*) &"Hydroponics", sizeof("Hydroponics") );

@@ -23,7 +23,7 @@ void leftButtonClick() {
 
 void buttonsLongPress() {
   beep.play(2);
-  if(menu.editMode > 0) {
+  if(menu.editMode != 0) {
     // move to next edit field
     menu.editMode--;
     if(menu.menuItem == CLOCK)

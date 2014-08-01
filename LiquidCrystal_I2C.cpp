@@ -240,15 +240,13 @@ void LiquidCrystal_I2C::load_custom_character(uint8_t char_num, uint8_t *rows){
 void LiquidCrystal_I2C::setBacklight(uint8_t new_val){
 	if (new_val) {
 		backlight();		// turn backlight on
-		_backlight = true;
 	} else {
 		noBacklight();		// turn backlight off
-		_backlight = false;
 	}
 }
 
 bool LiquidCrystal_I2C::isBacklight(){
-	return _backlight;
+	return _backlightval == LCD_BACKLIGHT;
 }
 
 void LiquidCrystal_I2C::printstr(const char c[]){

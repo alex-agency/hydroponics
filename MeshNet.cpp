@@ -598,10 +598,9 @@ void printDebugStateInfo(){
 	DEBUG_PRINTLN(newToBaseMacAddress);
 }
 
-//#define PC_TEST
-#ifdef PC_TEST 
+//#ifdef PC_TEST 
 
-int main(){
+void meshTest(){
 	printf("Inizio programma\n");
 	
 	printDebugStateInfo();
@@ -620,4 +619,27 @@ int main(){
 	printf("Fine programma\n");
 }
 
-#endif
+/*        
+Inizio programma
+myAddress: 0 toBaseInterface: 255 toBaseMacAddress: 0
+routingTableLen: 0
+childTableLen: 0
+newToBaseInterface: 255 newToBaseMacAddress: 0
+2 111 71 17 17 17 34  
+processIncomingPacket len: 7 interface: 0 macAddress: 1
+packet: 2 111 71 17 17 17 34  
+beaconRicevuto!3 0 0 0 2 100 0 0 0  
+processIncomingPacket len: 9 interface: 0 macAddress: 2
+packet: 3 0 0 0 2 100 0 0 0  
+5 103 69 139 107 1 3 100 0 0 0  
+processIncomingPacket len: 11 interface: 0 macAddress: 1
+packet: 5 103 69 139 107 1 3 100 0 0 0  
+myAddress: 0 toBaseInterface: 255 toBaseMacAddress: 0
+routingTableLen: 0
+childTableLen: 1
+0 0 0 2 0 2  
+newToBaseInterface: 255 newToBaseMacAddress: 0
+Fine programma
+*/
+
+//#endif

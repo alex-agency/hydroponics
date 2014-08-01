@@ -58,6 +58,7 @@ extern uint16_t networkId;
 
 void printDebugStateInfo();
 int printPacket(unsigned char *, uint8_t);
+void meshTest();
 
 
 #endif
