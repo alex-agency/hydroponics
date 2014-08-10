@@ -13,12 +13,12 @@ OneButton leftButton(A3, true);
 
 void rightButtonClick() {
   menu.nextItem = 1;
-  menu.showMenu();
+  menu.show();
 }
 
 void leftButtonClick() {
   menu.nextItem = -1;
-  menu.showMenu();
+  menu.show();
 }
 
 void buttonsLongPress() {
@@ -36,7 +36,7 @@ void buttonsLongPress() {
     // close Edit menu
     menu.editMode = 0;
   }
-  menu.showMenu();
+  menu.show();
 }
 
 

@@ -137,28 +137,14 @@ public:
       // update clock      
       if(editMode == 0)
         clock = rtc.now();
-      // update menu
-      showMenu();
+      // update lcd
+      show();
     }
     // update beep
     beep.update();
   }
 
   void checkTouch() {
-    // less 10 sec after touch
-    if(lastTouch+10 > lastUpdate) {
-      return;
-    }
-    // check error
-    if(states[ERROR] != NO_ERROR) {
-      showAlert();
-      return;
-    }
-    // check warnings
-    if(states[WARNING] != NO_WARNING) {
-      showWarning();
-      return;
-    }
     // less 30 sec after touch
     if(menuItem == TEST || lastTouch+30 > lastUpdate) {
       return;
@@ -176,7 +162,7 @@ public:
     }
   }
 
-  void showMenu() {
+  void show() {
     // check button click
     if(nextItem != 0) {
       lastTouch = millis()/1000;
@@ -188,7 +174,7 @@ public:
         nextItem = 0;
         return;
       }
-    }
+    } 
     // check edit mode
     if(editMode == false || editMode == 2) {
       // move forward to next menu
@@ -201,13 +187,30 @@ public:
       // enable blink for edit mode
       textBlink = true;
     }
+    // check error
+    if(states[ERROR] != NO_ERROR && 
+        lastTouch+10 <= lastUpdate) {
+      showAlert();
+      return;
+    }
+    // check warnings
+    if(states[WARNING] != NO_WARNING && 
+        lastTouch+10 <= lastUpdate) {
+      showWarning();
+      return;
+    }
+    // main screen
+    if(menuItem == HOME) {
+      homeScreen();
+      return;
+    }
+    showMenu();
+  }
 
+  void showMenu() {
     // print menu
     lcd.home();
     switch (menuItem) {
-      case HOME:
-        homeScreen();
-        break;
       case WATERING_DURATION:
         fprintf_P(&lcd_out, PSTR("Watering durat. \nfor {%2d} min      "), 
           settings.wateringDuration += nextItem);
@@ -344,6 +347,7 @@ private:
 
   void homeScreen() {
     textBlink = true;
+    lcd.home();
     fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
       C_FLOWER, C_FLOWER, C_FLOWER, C_FLOWER, C_HEART, 
       C_FLOWER, C_HEART, clock.hour(), clock.minute());

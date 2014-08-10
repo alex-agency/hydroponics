@@ -12,7 +12,7 @@
 #include "RF24Layer2.h"
 #include "MeshNet.h"
 
-#define DEBUG
+//#define DEBUG
 
 // Declare output
 static int serial_putchar(char c, FILE *) {
@@ -238,22 +238,38 @@ bool read_BH1750() {
 void check_levels() {
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
-  /*if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
+  #ifdef DEBUG_LEVELS
+    printf_P(PSTR("LEVELS: Info: Substrate level: %d.\n\r"), 
+      analogRead(SUBSTRATE_LEVELPIN));
+  #endif
+  if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     states[ERROR] = ERROR_NO_SUBSTRATE;
     return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
+  #ifdef DEBUG_LEVELS
+    printf_P(PSTR("LEVELS: Info: Substrate delivered: %d.\n\r"), 
+      digitalRead(SUBSTRATE_DELIVEREDPIN));
+  #endif
   if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
     states[WARNING] = INFO_SUBSTRATE_DELIVERED;
     return;
   }
   // no pull-up for A6 and A7
   pinMode(WATER_LEVELPIN, INPUT);
+  #ifdef DEBUG_LEVELS
+    printf_P(PSTR("LEVELS: Info: Water level: %d.\n\r"), 
+      analogRead(WATER_LEVELPIN));
+  #endif
   if(analogRead(WATER_LEVELPIN) > 700) {
     states[WARNING] = WARNING_NO_WATER;
     return;
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
+  #ifdef DEBUG_LEVELS
+    printf_P(PSTR("LEVELS: Info: Substrate full: %d.\n\r"), 
+      digitalRead(SUBSTRATE_FULLPIN));
+  #endif
   if(digitalRead(SUBSTRATE_FULLPIN) == 1) { 	  
   	if(substTankFull == false) {
       substTankFull = true;
@@ -262,7 +278,7 @@ void check_levels() {
     }
   } else {
   	substTankFull = false;
-  }*/
+  }
 }
 
 void relayOn(uint8_t relay) {
@@ -330,25 +346,25 @@ void check() {
     return;
   }
   // read DHT sensor
-  /*if(read_DHT() == false) {
+  if(read_DHT() == false) {
     states[ERROR] = ERROR_DHT;
     return;
-  }*/
+  }
   // read BH1750 sensor
   if(read_BH1750() == false) {
     states[ERROR] = ERROR_BH1750;
     return;
   }
   // read DS18B20 sensors
-  /*if(read_DS18B20() == false) {
+  if(read_DS18B20() == false) {
     states[ERROR] = ERROR_DS18B20;
     return;
-  }*/
+  }
   // reset error
   states[ERROR] = NO_ERROR;
 
   // check substrate temperature
-  /*if(states[SUBSTRATE_TEMP] <= settings.subsTempMinimum) {
+  if(states[SUBSTRATE_TEMP] <= settings.subsTempMinimum) {
     states[WARNING] = WARNING_SUBSTRATE_COLD;
     return;
   }
@@ -356,11 +372,11 @@ void check() {
   if(states[AIR_TEMP] <= settings.airTempMinimum && 
       // prevent nightly alarm
       clock.hour() >= 7) {
-    states[WARNING = WARNING_AIR_COLD;
+    states[WARNING] = WARNING_AIR_COLD;
     return;
   } else if(states[AIR_TEMP] >= settings.airTempMaximum) {
     states[WARNING] = WARNING_AIR_HOT;
-  }*/
+  }
   // reset warning
   states[WARNING] = NO_WARNING;
 }
