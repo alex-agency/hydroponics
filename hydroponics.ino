@@ -243,11 +243,11 @@ void check_levels() {
       analogRead(SUBSTRATE_LEVELPIN));
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    if(states[WARNING] == WARNING_WATERING)
-      states[WARNING] = WARNING_SUBSTRATE_LOW;
-    else if(states[WARNING] != WARNING_SUBSTRATE_LOW)
+    // prevent fail alert
+    if(millis()/1000 > lastWatering + 3)
       states[ERROR] = ERROR_NO_SUBSTRATE;
-    return;
+  	else
+      states[WARNING] = WARNING_SUBSTRATE_LOW;	  
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
   #ifdef DEBUG_LEVELS
@@ -386,7 +386,9 @@ void check() {
 
 void doWork() {
   // don't do any work while error
-  if(states[ERROR] != NO_ERROR) {
+  if(states[ERROR] != NO_ERROR && 
+  	  // skip no substrate error
+  	  states[ERROR] != ERROR_NO_SUBSTRATE) {
     return;
   }
   uint8_t speed = 60; // sec per min
@@ -540,8 +542,6 @@ void watering() {
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 10;
-  if(states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 15;
   // pause every 30 sec
   if((now-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG

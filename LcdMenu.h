@@ -132,8 +132,8 @@ public:
     // timer fo 1 sec
     if(millis()/1000 - lastUpdate >= 1) {
       lastUpdate = millis()/1000;
-      // keep home screen and sleep
-      checkTouch();
+      // keep home screen and sleeping
+      keepDefault();
       // update clock      
       if(editMode == 0)
         clock = rtc.now();
@@ -144,9 +144,9 @@ public:
     beep.update();
   }
 
-  void checkTouch() {
+  void keepDefault() {
     // less 30 sec after touch
-    if(menuItem == TEST || lastTouch+30 > lastUpdate) {
+    if(lastTouch+30 > lastUpdate || menuItem == TEST) {
       return;
     }
     // return to home
@@ -187,13 +187,13 @@ public:
       // enable blink for edit mode
       textBlink = true;
     }
-    // check error
+    // error screen
     if(states[ERROR] != NO_ERROR && 
         lastTouch+10 <= lastUpdate) {
       showAlert();
       return;
     }
-    // check warnings
+    // warning screen
     if(states[WARNING] != NO_WARNING && 
         lastTouch+10 <= lastUpdate) {
       showWarning();
@@ -204,6 +204,7 @@ public:
       homeScreen();
       return;
     }
+    // menu screen
     showMenu();
   }
 
