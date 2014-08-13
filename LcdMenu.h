@@ -310,6 +310,7 @@ public:
             settings.wateringOtherPeriod = 3; //min
 
             settings.wateringDuration = 2; //min
+            settings.mistingDuration = 10; //sec
           }
         }
         break;

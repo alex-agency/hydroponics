@@ -245,7 +245,7 @@ void check_levels() {
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     if(states[WARNING] == WARNING_WATERING)
       states[WARNING] = WARNING_SUBSTRATE_LOW;
-    else
+    else if(states[WARNING] != WARNING_SUBSTRATE_LOW)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     return;
   }
