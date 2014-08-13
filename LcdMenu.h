@@ -305,8 +305,8 @@ public:
             settings.mistingSunnyPeriod = 1; 
             settings.mistingNightPeriod = 1;
             settings.mistingOtherPeriod = 1; //min
-            settings.wateringSunnyPeriod = 1;
-            settings.wateringNightPeriod = 1;
+            settings.wateringSunnyPeriod = 3;
+            settings.wateringNightPeriod = 3;
             settings.wateringOtherPeriod = 3; //min
 
             settings.wateringDuration = 2; //min

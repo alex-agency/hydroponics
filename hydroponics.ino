@@ -243,7 +243,10 @@ void check_levels() {
       analogRead(SUBSTRATE_LEVELPIN));
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
-    states[ERROR] = ERROR_NO_SUBSTRATE;
+    if(states[WARNING] == WARNING_WATERING)
+      states[WARNING] = WARNING_SUBSTRATE_LOW;
+    else
+      states[ERROR] = ERROR_NO_SUBSTRATE;
     return;
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
@@ -537,6 +540,8 @@ void watering() {
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 10;
+  if(states[WARNING] == WARNING_SUBSTRATE_LOW)
+    pauseDuration = 15;
   // pause every 30 sec
   if((now-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
