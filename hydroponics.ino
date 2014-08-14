@@ -11,6 +11,7 @@
 #include "RF24.h"
 #include "RF24Layer2.h"
 #include "MeshNet.h"
+#include "LowPower.h"
 
 //#define DEBUG
 
@@ -342,6 +343,21 @@ void check() {
   // check memory
   if(freeMemory() < 600) {
     states[ERROR] = ERROR_LOW_MEMORY;
+    return;
+  }
+  // prevent burn system
+  if(states[COMPUTER_TEMP] >= 40) {
+    #ifdef DEBUG
+      printf_P(PSTR("SLEEP: Info: Go to long sleep.\n\r"));
+    #endif
+    // turn off relays
+    relayOff(LAMP);
+    relayOff(PUMP_WATERING);
+    relayOff(PUMP_MISTING);
+    // tunr off lcd
+    lcd.setBacklight(false);
+    // power down computer for 64 sec
+    LowPower.powerDown(SLEEP_8S, 8, ADC_OFF, BOD_OFF); 
     return;
   }
   // check EEPROM
