@@ -236,6 +236,15 @@ bool read_BH1750() {
 }
 
 void check_levels() {
+  pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
+  #ifdef DEBUG_LEVELS
+    printf_P(PSTR("LEVELS: Info: Substrate delivered: %d.\n\r"), 
+      digitalRead(SUBSTRATE_DELIVEREDPIN));
+  #endif
+  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
+    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
+    return;
+  }
   // no pull-up for A6 and A7
   pinMode(SUBSTRATE_LEVELPIN, INPUT);
   #ifdef DEBUG_LEVELS
@@ -247,26 +256,8 @@ void check_levels() {
     if(millis()/1000 > lastWatering + 180)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
-      states[WARNING] = WARNING_SUBSTRATE_LOW;	  
-  }
-  pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
-  #ifdef DEBUG_LEVELS
-    printf_P(PSTR("LEVELS: Info: Substrate delivered: %d.\n\r"), 
-      digitalRead(SUBSTRATE_DELIVEREDPIN));
-  #endif
-  if(digitalRead(SUBSTRATE_DELIVEREDPIN) == 1) {
-    states[WARNING] = INFO_SUBSTRATE_DELIVERED;
-    return;
-  }
-  // no pull-up for A6 and A7
-  pinMode(WATER_LEVELPIN, INPUT);
-  #ifdef DEBUG_LEVELS
-    printf_P(PSTR("LEVELS: Info: Water level: %d.\n\r"), 
-      analogRead(WATER_LEVELPIN));
-  #endif
-  if(analogRead(WATER_LEVELPIN) > 700) {
-    states[WARNING] = WARNING_NO_WATER;
-    return;
+      states[WARNING] = WARNING_SUBSTRATE_LOW;
+    return; 
   }
   pinMode(SUBSTRATE_FULLPIN, INPUT_PULLUP);
   #ifdef DEBUG_LEVELS
@@ -281,6 +272,16 @@ void check_levels() {
     }
   } else {
   	substTankFull = false;
+  }
+  // no pull-up for A6 and A7
+  pinMode(WATER_LEVELPIN, INPUT);
+  #ifdef DEBUG_LEVELS
+    printf_P(PSTR("LEVELS: Info: Water level: %d.\n\r"), 
+      analogRead(WATER_LEVELPIN));
+  #endif
+  if(analogRead(WATER_LEVELPIN) > 700) {
+    states[WARNING] = WARNING_NO_WATER;
+    return;
   }
 }
 
