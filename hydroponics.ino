@@ -244,9 +244,9 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/1000 > lastWatering + 3)
+    if(millis()/1000 > lastWatering + 180)
       states[ERROR] = ERROR_NO_SUBSTRATE;
-  	else
+    else
       states[WARNING] = WARNING_SUBSTRATE_LOW;	  
   }
   pinMode(SUBSTRATE_DELIVEREDPIN, INPUT_PULLUP);
