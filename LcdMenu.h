@@ -261,7 +261,7 @@ public:
             settings.lightDayStart%60);
         } else {
           fprintf_P(&lcd_out, PSTR("{%2d} o'clock      "), 
-            (settings.lightDayStart += nextItem)/60);
+            (settings.lightDayStart += (nextItem*60))/60);
         }
         break;
       case HUMIDITY_MINIMUM:
@@ -454,7 +454,6 @@ private:
     switch (states[WARNING]) { 
       case WARNING_SUBSTRATE_LOW:
         fprintf_P(&lcd_out, PSTR("Low substrate!  \n{Please add some!}"));
-        beep.play(1);
         return;
       case INFO_SUBSTRATE_FULL:
         fprintf_P(&lcd_out, PSTR("Substrate tank  \nis full! :)))   "));

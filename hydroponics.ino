@@ -559,7 +559,7 @@ void watering() {
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED ||
       states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 17;
+    pauseDuration = 19;
   // pause every 30 sec
   if((now-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
