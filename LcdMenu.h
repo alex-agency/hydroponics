@@ -285,7 +285,6 @@ public:
           settings.subsTempMinimum += nextItem, C_CELCIUM);
         break;
       case TEST:
-        storage.changed = false;
         textBlink = true;
         if(editMode == false) {
           fprintf_P(&lcd_out, PSTR("Test all systems\n       -> {Start?}"));
@@ -298,6 +297,7 @@ public:
           fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
           // enable test mode
           if(settings.lightMinimum != 10000) {
+            storage.changed = false;
             // save previous settings
             test = settings;
             // change settings for test
@@ -353,7 +353,7 @@ private:
     //fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
     //  C_FLOWER, C_FLOWER, C_FLOWER, C_FLOWER, C_HEART, 
     //  C_FLOWER, C_HEART, clock.hour(), clock.minute());
-    fprintf_P(&lcd_out, PSTR("                  %02d{:}%02d\n"), 
+    fprintf_P(&lcd_out, PSTR("           %02d{:}%02d\n"), 
       clock.hour(), clock.minute());
 
     if(homeScreenItem >= 16)
