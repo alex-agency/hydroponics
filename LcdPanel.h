@@ -35,8 +35,6 @@ void buttonsLongPress() {
   } else {
     // close Edit menu
     menu.editMode = 0;
-    // requested save settings
-    storage.changed = true;
   }
   menu.show();
 }

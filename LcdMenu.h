@@ -186,6 +186,8 @@ public:
     } else {
       // enable blink for edit mode
       textBlink = true;
+      // requested save settings
+      storage.changed = true;
     }
     // error screen
     if(states[ERROR] != NO_ERROR && 

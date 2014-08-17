@@ -7,35 +7,38 @@
 #include "DHT.h"
 #include "DS18B20.h"
 #include "BH1750.h"
-#include "nRF24L01.h"
-#include "RF24.h"
-#include "RF24Layer2.h"
-#include "MeshNet.h"
 #include "LowPower.h"
+#define MESH
+#ifdef MESH
+  #include "nRF24L01.h"
+  #include "RF24.h"
+  #include "RF24Layer2.h"
+  #include "MeshNet.h"
+#endif
 
 //#define DEBUG
 
-#ifdef SERIAL
-  // Declare output
-  static int serial_putchar(char c, FILE *) {
-    Serial.write(c);
-    return 0;
-  };
-  FILE serial_out = {0};
-#endif
+// Declare output
+static int serial_putchar(char c, FILE *) {
+  Serial.write(c);
+  return 0;
+};
+FILE serial_out = {0};
 
 // Declare Lcd Panel
 LcdPanel panel;
 
-// Declare MESH network
-const uint32_t deviceType = 001;
-uint32_t deviceUniqueId = 100002;
-static const uint8_t CE_PIN = 9;
-static const uint8_t CS_PIN = 10;
-const uint8_t RF24_INTERFACE = 0;
-const int NUM_INTERFACES = 1;
-// Declare radio
-RF24 radio(CE_PIN, CS_PIN);
+#ifdef MESH
+  // Declare MESH network
+  const uint32_t deviceType = 001;
+  uint32_t deviceUniqueId = 100002;
+  static const uint8_t CE_PIN = 9;
+  static const uint8_t CS_PIN = 10;
+  const uint8_t RF24_INTERFACE = 0;
+  const int NUM_INTERFACES = 1;
+  // Declare radio
+  RF24 radio(CE_PIN, CS_PIN);
+#endif
 
 // Declare DHT sensor
 #define DHTTYPE DHT11
@@ -65,20 +68,20 @@ static const uint8_t LAMPPIN = 7;
 //
 void setup()
 {
-  #ifdef SERIAL
-    // Configure output
-    Serial.begin(9600);
-    fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
-    stdout = stderr = &serial_out;
-  #endif
+  // Configure output
+  Serial.begin(9600);
+  fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
+  stdout = stderr = &serial_out;
   // prevent continiously restart
   delay(500);
   // restart if memory lower 512 bytes
   softResetMem(512);
   // restart after freezing for 8 sec
   softResetTimeout();
-  // initialize network
-  rf24init();
+  #ifdef MESH
+    // initialize network
+    rf24init();
+  #endif
   // initialize lcd panel
   panel.begin();
 }
@@ -109,41 +112,49 @@ void loop()
       // manage misting and watering
       doWork();
       // save settings
+      #ifdef DEBUG_EEPROM
+        printf_P(PSTR("EEPROM: Info: storage changed->%d, ok->%d.\n\r"), 
+            storage.changed, storage.ok);
+      #endif
       if(storage.changed && storage.ok) {
         // WARNING: EEPROM can burn!
         storage.save();
         storage.changed = false;
       }
-      //meshTest();
-      // send data to base
-      sendCommand( 1, (void*) &states, sizeof(states) );
-      /*sendCommand( 1, (void*) &"Hydroponics", sizeof("Hydroponics") );
-      sendCommand( HUMIDITY, (void*) states[HUMIDITY], 
-        sizeof(states[HUMIDITY]) );
-      sendCommand( AIR_TEMP, (void*) states[AIR_TEMP], 
-        sizeof(states[AIR_TEMP]) );
-      sendCommand( COMPUTER_TEMP, (void*) states[COMPUTER_TEMP],
-        sizeof(states[COMPUTER_TEMP]) );
-      sendCommand( SUBSTRATE_TEMP, (void*) states[SUBSTRATE_TEMP], 
-        sizeof(states[SUBSTRATE_TEMP]) );
-      sendCommand( LIGHT, (void*) states[LIGHT], 
-        sizeof(states[LIGHT]) );
-      sendCommand( PUMP_MISTING, (void*) states[PUMP_MISTING], 
-        sizeof(states[PUMP_MISTING]) );
-      sendCommand( PUMP_WATERING, (void*) states[PUMP_WATERING], 
-        sizeof(states[PUMP_WATERING]) );
-      sendCommand( LAMP, (void*) states[LAMP], 
-        sizeof(states[LAMP]) );
-      sendCommand( WARNING, (void*) states[WARNING], 
-        sizeof(states[WARNING]) );
-      sendCommand( ERROR, (void*) states[ERROR], 
-        sizeof(states[ERROR]) );*/
+      #ifdef MESH
+        //meshTest();
+        // send data to base
+        sendCommand( 1, (void*) &states, sizeof(states) );
+        /*sendCommand( 1, (void*) &"Hydroponics", sizeof("Hydroponics") );
+        sendCommand( HUMIDITY, (void*) states[HUMIDITY], 
+          sizeof(states[HUMIDITY]) );
+        sendCommand( AIR_TEMP, (void*) states[AIR_TEMP], 
+          sizeof(states[AIR_TEMP]) );
+        sendCommand( COMPUTER_TEMP, (void*) states[COMPUTER_TEMP],
+          sizeof(states[COMPUTER_TEMP]) );
+        sendCommand( SUBSTRATE_TEMP, (void*) states[SUBSTRATE_TEMP], 
+          sizeof(states[SUBSTRATE_TEMP]) );
+        sendCommand( LIGHT, (void*) states[LIGHT], 
+          sizeof(states[LIGHT]) );
+        sendCommand( PUMP_MISTING, (void*) states[PUMP_MISTING], 
+          sizeof(states[PUMP_MISTING]) );
+        sendCommand( PUMP_WATERING, (void*) states[PUMP_WATERING], 
+          sizeof(states[PUMP_WATERING]) );
+        sendCommand( LAMP, (void*) states[LAMP], 
+          sizeof(states[LAMP]) );
+        sendCommand( WARNING, (void*) states[WARNING], 
+          sizeof(states[WARNING]) );
+        sendCommand( ERROR, (void*) states[ERROR], 
+          sizeof(states[ERROR]) );*/
+      #endif
     }
   }
   // update LCD 
   panel.update();
-  // update network
-  rf24receive();
+  #ifdef MESH
+    // update network
+    rf24receive();
+  #endif
 }
 
 unsigned long seconds() {
@@ -151,27 +162,27 @@ unsigned long seconds() {
 }
 
 /****************************************************************************/
-
-// Pass a layer3 packet to the layer2 of MESH network
-int sendPacket(uint8_t* message, uint8_t len, 
-    uint8_t interface, uint8_t macAddress) {  
-  // Here should be called the layer2 function corresponding to interface
-  if(interface == RF24_INTERFACE) {
-    #ifdef DEBUG_MESH
-      printf_P(PSTR("MESH: INFO: Sending %d byte to %d\n\r"), len, macAddress);
-    #endif
-    rf24sendPacket(message, len, macAddress);
-    return 1;
+#ifdef MESH
+  // Pass a layer3 packet to the layer2 of MESH network
+  int sendPacket(uint8_t* message, uint8_t len, 
+      uint8_t interface, uint8_t macAddress) {  
+    // Here should be called the layer2 function corresponding to interface
+    if(interface == RF24_INTERFACE) {
+      #ifdef DEBUG_MESH
+        printf_P(PSTR("MESH: INFO: Sending %d byte to %d\n\r"), len, macAddress);
+      #endif
+      rf24sendPacket(message, len, macAddress);
+      return 1;
+    }
+    return 0;
   }
-  return 0;
-}
 
-void onCommandReceived(uint8_t command, void* data, uint8_t dataLen) {
-  #ifdef DEBUG_MESH
-    printf_P(PSTR("MESH: INFO: Received %d, %d\n\r"), command, data);
-  #endif
-}
-
+  void onCommandReceived(uint8_t command, void* data, uint8_t dataLen) {
+    #ifdef DEBUG_MESH
+      printf_P(PSTR("MESH: INFO: Received %d, %d\n\r"), command, data);
+    #endif
+  }
+#endif
 /****************************************************************************/
 
 bool read_DHT() {
