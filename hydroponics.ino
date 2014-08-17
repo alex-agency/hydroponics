@@ -15,12 +15,14 @@
 
 //#define DEBUG
 
-// Declare output
-static int serial_putchar(char c, FILE *) {
-  Serial.write(c);
-  return 0;
-};
-FILE serial_out = {0};
+#ifdef SERIAL
+  // Declare output
+  static int serial_putchar(char c, FILE *) {
+    Serial.write(c);
+    return 0;
+  };
+  FILE serial_out = {0};
+#endif
 
 // Declare Lcd Panel
 LcdPanel panel;
@@ -39,14 +41,11 @@ RF24 radio(CE_PIN, CS_PIN);
 #define DHTTYPE DHT11
 
 // Declare variables
-uint16_t timerFast = 0;
-uint16_t timerSlow = 0;
-uint16_t lastMisting = 0;
-uint16_t lastWatering = 0;
-uint16_t sunrise = 0;
-uint8_t startMisting = 0;
-uint16_t startWatering = 0;
-bool substTankFull = false;
+unsigned long timerFast, timerSlow, lastMisting, lastWatering;
+uint16_t sunrise;
+uint8_t startMisting;
+unsigned long startWatering;
+bool substTankFull;
 
 // Define pins
 static const uint8_t DHTPIN = 3;
@@ -66,10 +65,12 @@ static const uint8_t LAMPPIN = 7;
 //
 void setup()
 {
-  // Configure output
-  Serial.begin(9600);
-  fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
-  stdout = stderr = &serial_out;
+  #ifdef SERIAL
+    // Configure output
+    Serial.begin(9600);
+    fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
+    stdout = stderr = &serial_out;
+  #endif
   // prevent continiously restart
   delay(500);
   // restart if memory lower 512 bytes
@@ -90,9 +91,8 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  uint16_t now = millis()/1000;
-  if(now - timerFast >= 1) {
-    timerFast = now;
+  if(seconds() - timerSlow >= 1) {
+    timerFast = seconds();
     // check level sensors
     check_levels();
     // update watering
@@ -100,8 +100,8 @@ void loop()
     // update misting
     misting();
     // timer fo 1 min
-    if(now - timerSlow >= 60) {
-      timerSlow = now;
+    if(timerFast - timerSlow >= 60) {
+      timerSlow = timerFast;
       // system check
       check();
       // manage light
@@ -144,6 +144,10 @@ void loop()
   panel.update();
   // update network
   rf24receive();
+}
+
+unsigned long seconds() {
+  return millis()/1000;
 }
 
 /****************************************************************************/
@@ -254,7 +258,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/1000 > lastWatering + 180)
+    if(seconds() > lastWatering + 180)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -441,12 +445,12 @@ void doWork() {
 }
 
 void checkWateringPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/1000 > lastWatering + (_period * _time))
-    startWatering = millis()/1000;
+  if(_period != 0 && seconds() > lastWatering + (_period * _time))
+    startWatering = seconds();
 }
 
 void checkMistingPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/1000 > lastMisting + (_period * _time))
+  if(_period != 0 && seconds() > lastMisting + (_period * _time))
     startMisting = settings.mistingDuration;
 }
 
@@ -523,7 +527,7 @@ void misting() {
   #endif
   states[WARNING] = WARNING_MISTING;
   startMisting--;
-  lastMisting = millis()/1000;
+  lastMisting = seconds();
   relayOn(PUMP_MISTING);
 }
 
@@ -532,21 +536,21 @@ void watering() {
   	  states[PUMP_WATERING] == false) {
     return;
   }
-  uint16_t now = millis()/1000;
-  bool timeIsOver = startWatering + (settings.wateringDuration*60) <= now;
-  // stop watering
-  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED && timeIsOver) {
-    #ifdef DEBUG
-      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
-    #endif
-    relayOff(PUMP_WATERING);
-    startWatering = 0;
-    if(states[WARNING] == WARNING_WATERING)
-      states[WARNING] = NO_WARNING;
-    return;
-  }
-  // emergency stop
-  if(timeIsOver || states[ERROR] == ERROR_NO_SUBSTRATE) {
+  // time is over
+  if(startWatering + (settings.wateringDuration*60) <= seconds() || 
+      states[ERROR] == ERROR_NO_SUBSTRATE) {
+    // stop watering
+    if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
+      #ifdef DEBUG
+        printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
+      #endif
+      relayOff(PUMP_WATERING);
+      startWatering = 0;
+      if(states[WARNING] == WARNING_WATERING)
+        states[WARNING] = NO_WARNING;
+      return;
+    }
+    // emergency stop
     relayOff(PUMP_WATERING);
     states[WARNING] = WARNING_SUBSTRATE_LOW;
     startWatering = 0;
@@ -561,7 +565,7 @@ void watering() {
       states[WARNING] == WARNING_SUBSTRATE_LOW)
     pauseDuration = 19;
   // pause every 30 sec
-  if((now-startWatering) % 30 <= pauseDuration) {
+  if((seconds()-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -572,6 +576,6 @@ void watering() {
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
   states[WARNING] = WARNING_WATERING;
-  lastWatering = now;
+  lastWatering = seconds();
   relayOn(PUMP_WATERING);
 }

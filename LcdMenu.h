@@ -44,7 +44,7 @@ RTC_DS1307 rtc;
 DateTime clock;
 
 // Declare state map
-SimpleMap<uint8_t, uint16_t, 11> states;
+SimpleMap<uint8_t, uint16_t, 10> states;
 
 // Declare custom LCD characters
 static const uint8_t C_CELCIUM = 0;
@@ -121,10 +121,10 @@ public:
     lcd.begin();
     // load custom characters
     lcd.createChar(C_CELCIUM, settings.c_celcium);
-    lcd.createChar(C_HEART, settings.c_heart);
+    //lcd.createChar(C_HEART, settings.c_heart);
     lcd.createChar(C_HUMIDITY, settings.c_humidity);
     lcd.createChar(C_TEMP, settings.c_temp);
-    lcd.createChar(C_FLOWER, settings.c_flower);
+    //lcd.createChar(C_FLOWER, settings.c_flower);
     lcd.createChar(C_LAMP, settings.c_lamp);
   }
 
@@ -329,8 +329,8 @@ public:
   }
 
 private:
-  uint16_t lastTouch;
-  uint16_t lastUpdate;
+  unsigned long lastTouch;
+  unsigned long lastUpdate;
   uint8_t homeScreenItem;
 
   void textBlinkPos(uint8_t _row, uint8_t _start, uint8_t _end) {
@@ -350,9 +350,11 @@ private:
   void homeScreen() {
     textBlink = true;
     lcd.home();
-    fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
-      C_FLOWER, C_FLOWER, C_FLOWER, C_FLOWER, C_HEART, 
-      C_FLOWER, C_HEART, clock.hour(), clock.minute());
+    //fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
+    //  C_FLOWER, C_FLOWER, C_FLOWER, C_FLOWER, C_HEART, 
+    //  C_FLOWER, C_HEART, clock.hour(), clock.minute());
+    fprintf_P(&lcd_out, PSTR("                  %02d{:}%02d\n"), 
+      clock.hour(), clock.minute());
 
     if(homeScreenItem >= 16)
       homeScreenItem = 0;
