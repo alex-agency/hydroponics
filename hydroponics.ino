@@ -491,12 +491,13 @@ void doLight() {
         printf_P(PSTR("Light: Info: Set new Day Start time: %02d:%02d.\n\r"), 
         sunrise/60, sunrise%60);
       #endif
-      // save to EEPROM if big difference
-      if(sunrise-30 > settings.lightDayStart || 
-          sunrise+30 < settings.lightDayStart) {
+      // save to EEPROM if big difference (more than 30 min)
+      if(sunrise-60 > settings.lightDayStart || 
+          sunrise < settings.lightDayStart) {
         storage.changed = true;
       }
-      settings.lightDayStart = sunrise;
+      // setup 30 min earlier
+      settings.lightDayStart = sunrise-30;
       // prevent rewrite, move to out of morning
       sunrise += 300;
     }
