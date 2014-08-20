@@ -492,12 +492,12 @@ void doLight() {
         sunrise/60, sunrise%60);
       #endif
       // save to EEPROM if big difference (more than 30 min)
-      if(sunrise-60 > settings.lightDayStart || 
-          sunrise < settings.lightDayStart) {
+      if(sunrise-90 > settings.lightDayStart || 
+          sunrise-30 < settings.lightDayStart) {
         storage.changed = true;
       }
-      // setup 30 min earlier
-      settings.lightDayStart = sunrise-30;
+      // setup 1 hour earlier
+      settings.lightDayStart = sunrise-60;
       // prevent rewrite, move to out of morning
       sunrise += 300;
     }
