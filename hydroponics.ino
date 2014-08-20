@@ -8,7 +8,7 @@
 #include "DS18B20.h"
 #include "BH1750.h"
 #include "LowPower.h"
-#define MESH
+//#define MESH
 #ifdef MESH
   #include "nRF24L01.h"
   #include "RF24.h"
@@ -94,8 +94,8 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  if(seconds() - timerSlow >= 1) {
-    timerFast = seconds();
+  if(millis() - timerFast >= 1000) {
+    timerFast = millis();
     // check level sensors
     check_levels();
     // update watering
@@ -103,7 +103,7 @@ void loop()
     // update misting
     misting();
     // timer fo 1 min
-    if(timerFast - timerSlow >= 60) {
+    if(timerFast - timerSlow >= 60000) {
       timerSlow = timerFast;
       // system check
       check();
@@ -155,10 +155,6 @@ void loop()
     // update network
     rf24receive();
   #endif
-}
-
-unsigned long seconds() {
-  return millis()/1000;
 }
 
 /****************************************************************************/
@@ -269,7 +265,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(seconds() > lastWatering + 180)
+    if(millis()/1000 > lastWatering + 180)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -456,12 +452,12 @@ void doWork() {
 }
 
 void checkWateringPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && seconds() > lastWatering + (_period * _time))
-    startWatering = seconds();
+  if(_period != 0 && millis()/1000 > lastWatering + (_period * _time))
+    startWatering = millis()/1000;
 }
 
 void checkMistingPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && seconds() > lastMisting + (_period * _time))
+  if(_period != 0 && millis()/1000 > lastMisting + (_period * _time))
     startMisting = settings.mistingDuration;
 }
 
@@ -539,7 +535,7 @@ void misting() {
   #endif
   states[WARNING] = WARNING_MISTING;
   startMisting--;
-  lastMisting = seconds();
+  lastMisting = millis()/1000;
   relayOn(PUMP_MISTING);
 }
 
@@ -549,7 +545,7 @@ void watering() {
     return;
   }
   // time is over
-  if(startWatering + (settings.wateringDuration*60) <= seconds() || 
+  if(startWatering + (settings.wateringDuration*60) <= millis()/1000 || 
       states[ERROR] == ERROR_NO_SUBSTRATE) {
     // stop watering
     if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
@@ -577,7 +573,7 @@ void watering() {
       states[WARNING] == WARNING_SUBSTRATE_LOW)
     pauseDuration = 19;
   // pause every 30 sec
-  if((seconds()-startWatering) % 30 <= pauseDuration) {
+  if((millis()/1000-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -588,6 +584,6 @@ void watering() {
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
   states[WARNING] = WARNING_WATERING;
-  lastWatering = seconds();
+  lastWatering = millis()/1000;
   relayOn(PUMP_WATERING);
 }

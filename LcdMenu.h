@@ -183,11 +183,6 @@ public:
       nextItem = 0;
       textBlink = false;
       editMode = false;
-    } else {
-      // enable blink for edit mode
-      textBlink = true;
-      // requested save settings
-      storage.changed = true;
     }
     // error screen
     if(states[ERROR] != NO_ERROR && 
@@ -211,6 +206,12 @@ public:
   }
 
   void showMenu() {
+    if(editMode) {
+      // enable blink for edit mode
+      textBlink = true;
+      // requested save settings
+      storage.changed = true;
+    }
     // print menu
     lcd.home();
     switch (menuItem) {
@@ -297,9 +298,9 @@ public:
           }
         } else {
           fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
+          storage.changed = false;
           // enable test mode
           if(settings.lightMinimum != 10000) {
-            storage.changed = false;
             // save previous settings
             test = settings;
             // change settings for test

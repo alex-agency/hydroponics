@@ -11,7 +11,7 @@ static const uint8_t EEPROM_SIZE = 255;
 // prevent burn memory
 static const uint8_t MAX_WRITES = 20;
 // Declare EEPROM values
-#define SETTINGS_ID  "a"
+#define SETTINGS_ID  "@"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDuration, wateringSunnyPeriod, wateringNightPeriod, wateringOtherPeriod;
@@ -26,7 +26,7 @@ struct SettingsStruct {
   15, 90, 0, 120,
   3, 120, 0, 60,
   700, 300, 14,
-  50, 75,
+  45, 75,
   17, 35, 15,
   SETTINGS_ID,
   {24, 24, 3, 4, 4, 4, 3, 0}, {0, 10, 21, 17, 10, 4, 0, 0}, 
