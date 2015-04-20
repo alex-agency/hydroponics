@@ -231,10 +231,10 @@ bool read_DS18B20() {
 
 bool read_BH1750() {
   BH1750 lightMeter;
-  lightMeter.begin(BH1750_ONE_TIME_HIGH_RES_MODE_2);
-  int value = lightMeter.readLightLevel();
+  lightMeter.begin(BH1750_ONE_TIME_HIGH_RES_MODE);
+  uint16_t value = lightMeter.readLightLevel();
 
-  if(value < 0) {
+  if(value == 54612) {
     #ifdef DEBUG_BH1750
       printf_P(PSTR("BH1750: Error: Light sensor communication failed!\n\r"));
     #endif
@@ -400,9 +400,7 @@ void check() {
     return;
   }
   // check air temperature
-  if(states[AIR_TEMP] <= settings.airTempMinimum && 
-      // prevent nightly alarm
-      clock.hour() >= 7) {
+  if(states[AIR_TEMP] <= settings.airTempMinimum) {
     states[WARNING] = WARNING_AIR_COLD;
     return;
   } else if(states[AIR_TEMP] >= settings.airTempMaximum) {

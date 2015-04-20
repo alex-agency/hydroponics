@@ -140,8 +140,9 @@ public:
       // update lcd
       show();
     }
-    // update beep
-    beep.update();
+    // update beep, but prevent nightly alarm
+    if( clock.hour() >= 8 && clock.hour() < 22 ) 
+      beep.update();
   }
 
   void keepDefault() {
@@ -300,11 +301,11 @@ public:
           fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
           storage.changed = false;
           // enable test mode
-          if(settings.lightMinimum != 10000) {
+          if(settings.lightMinimum != 30000) {
             // save previous settings
             test = settings;
             // change settings for test
-            settings.lightMinimum = 10000; //lux
+            settings.lightMinimum = 30000; //lux
             settings.lightDayDuration = 18; //hours
             settings.mistingSunnyPeriod = 1; 
             settings.mistingNightPeriod = 1;
