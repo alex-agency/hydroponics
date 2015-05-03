@@ -46,34 +46,39 @@ DateTime clock;
 // Declare state map
 SimpleMap<uint8_t, uint16_t, 10> states;
 
-// Declare custom LCD characters
+// Define custom LCD characters
 static const uint8_t C_CELCIUM = 0;
 static const uint8_t C_HEART = 1;
 static const uint8_t C_HUMIDITY = 2;
 static const uint8_t C_TEMP = 3;
 static const uint8_t C_FLOWER = 4;
 static const uint8_t C_LAMP = 5;
-// Declare LCD menu items
+// Define LCD menu items
 static const uint8_t HOME = 0;
 static const uint8_t WATERING_DURATION = 1;
 static const uint8_t WATERING_SUNNY = 2;
-static const uint8_t WATERING_NIGHT = 3;
-static const uint8_t WATERING_OTHER = 4;
-static const uint8_t MISTING_DURATION = 5;
-static const uint8_t MISTING_SUNNY = 6;
-static const uint8_t MISTING_NIGHT = 7;
-static const uint8_t MISTING_OTHER = 8;
-static const uint8_t LIGHT_MINIMUM = 9;
-static const uint8_t LIGHT_DAY_DURATION = 10;
-static const uint8_t LIGHT_DAY_START = 11;
-static const uint8_t HUMIDITY_MINIMUM = 12;
-static const uint8_t HUMIDITY_MAXIMUM = 13;
-static const uint8_t AIR_TEMP_MINIMUM = 14;
-static const uint8_t AIR_TEMP_MAXIMUM = 15;
-static const uint8_t SUBSTRATE_TEMP_MINIMUM = 16;
-static const uint8_t TEST = 17;
-static const uint8_t CLOCK = 18;
-// Declare warning states
+static const uint8_t WATERING = 3;
+static const uint8_t MISTING_DURATION = 4;
+static const uint8_t MISTING_SUNNY = 5;
+static const uint8_t MISTING = 6;
+static const uint8_t LIGHT_MINIMUM = 7;
+static const uint8_t LIGHT_DAY_DURATION = 8;
+static const uint8_t LIGHT_DAY_START = 9;
+static const uint8_t HUMIDITY_MINIMUM = 10;
+static const uint8_t HUMIDITY_MAXIMUM = 11;
+static const uint8_t AIR_TEMP_MINIMUM = 12;
+static const uint8_t AIR_TEMP_MAXIMUM = 13;
+static const uint8_t SUBSTRATE_TEMP_MINIMUM = 14;
+static const uint8_t SILENT_NIGHT = 15;
+static const uint8_t TEST = 16;
+static const uint8_t CLOCK = 17;
+// Define clock settings items
+static const uint8_t YEAR_SETTING = 3;
+static const uint8_t MONTH_SETTING = 4;
+static const uint8_t DAY_SETTING = 5;
+static const uint8_t MINUTE_SETTING = 6;
+static const uint8_t HOUR_SETTING = 7;
+// Define warning states
 static const uint8_t NO_WARNING = 0;
 static const uint8_t INFO_SUBSTRATE_FULL = 1;
 static const uint8_t WARNING_SUBSTRATE_LOW = 2;
@@ -84,7 +89,7 @@ static const uint8_t WARNING_AIR_COLD = 6;
 static const uint8_t WARNING_AIR_HOT = 7;
 static const uint8_t WARNING_SUBSTRATE_COLD = 8;
 static const uint8_t WARNING_NO_WATER = 9;
-// Declare error states
+// Define error states
 static const uint8_t NO_ERROR = 0;
 static const uint8_t ERROR_LOW_MEMORY = 10;
 static const uint8_t ERROR_EEPROM = 11;
@@ -92,7 +97,7 @@ static const uint8_t ERROR_DHT = 12;
 static const uint8_t ERROR_BH1750 = 13;
 static const uint8_t ERROR_DS18B20 = 14;
 static const uint8_t ERROR_NO_SUBSTRATE = 15;
-// Declare state map keys constants
+// Define state map keys constants
 static const uint8_t HUMIDITY = 2; // air humidity
 static const uint8_t AIR_TEMP = 3;
 static const uint8_t COMPUTER_TEMP = 4; // temperature inside
@@ -103,7 +108,16 @@ static const uint8_t PUMP_WATERING = 8;
 static const uint8_t LAMP = 9;
 static const uint8_t WARNING = 10;
 static const uint8_t ERROR = 11;
-
+// Define constants
+static const uint8_t ENHANCED_MODE = 2; // edit mode
+static const uint16_t TEST_ENABLE = 20000;
+static const bool ONE_BLINK = 1;
+static const uint16_t MILLIS_TO_SEC = 1000;
+static const bool ONE_SEC = 1;
+static const uint8_t TEN_SEC = 10;
+static const uint8_t HALF_MIN = 30;
+static const uint8_t SEC_TO_MIN = 60;
+static const uint16_t FIVE_MIN = 300;
 
 class LcdMenu
 {
@@ -129,35 +143,35 @@ public:
   }
 
   void update() {
-    // timer fo 1 sec
-    if(millis()/1000 - lastUpdate >= 1) {
-      lastUpdate = millis()/1000;
+    // timer for 1 sec
+    if(millis()/MILLIS_TO_SEC - lastUpdate >= ONE_SEC) {
+      lastUpdate = millis()/MILLIS_TO_SEC;
       // keep home screen and sleeping
       keepDefault();
       // update clock      
-      if(editMode == 0)
+      if(editMode == false)
         clock = rtc.now();
       // update lcd
       show();
     }
-    // update beep, but prevent nightly alarm
-    if( clock.hour() >= 8 && clock.hour() < 22 ) 
-      beep.update();
+    // update beep
+    if(settings.silentMorning <= clock.hour() && 
+      clock.hour() < settings.silentEvening)
+    beep.update();
   }
 
   void keepDefault() {
     // less 30 sec after touch
-    if(lastTouch+30 > lastUpdate || menuItem == TEST) {
+    if(lastTouch+HALF_MIN > lastUpdate || menuItem == TEST) {
       return;
     }
     // return to home
     if(menuItem != HOME) {
       menuItem = HOME; 
       editMode = false;
-      homeScreenItem = 0;
     }
     // 5 min after touch
-    if(lcd.isBacklight() && lastTouch+300 < lastUpdate) {
+    if(lcd.isBacklight() && lastTouch+FIVE_MIN < lastUpdate) {
       // switch off backlight
       lcd.setBacklight(false);
     }
@@ -165,35 +179,35 @@ public:
 
   void show() {
     // check button click
-    if(nextItem != 0) {
-      lastTouch = millis()/1000;
-      beep.play(1);
+    if(nextItem != false) {
+      lastTouch = millis()/MILLIS_TO_SEC;
+      beep.play(ONE_BEEP);
       // enable backlight
       if(lcd.isBacklight() == false) {
         lcd.setBacklight(true);
         // reset click
-        nextItem = 0;
+        nextItem = false;
         return;
       }
     } 
     // check edit mode
-    if(editMode == false || editMode == 2) {
+    if(editMode == false || editMode == ENHANCED_MODE) {
       // move forward to next menu
       menuItem += nextItem;
       // don't change settings
-      nextItem = 0;
+      nextItem = false;
       textBlink = false;
       editMode = false;
     }
     // error screen
     if(states[ERROR] != NO_ERROR && 
-        lastTouch+10 <= lastUpdate) {
+        lastTouch+TEN_SEC <= lastUpdate) {
       showAlert();
       return;
     }
     // warning screen
     if(states[WARNING] != NO_WARNING && 
-        lastTouch+10 <= lastUpdate) {
+        lastTouch+TEN_SEC <= lastUpdate) {
       showWarning();
       return;
     }
@@ -201,6 +215,8 @@ public:
     if(menuItem == HOME) {
       homeScreen();
       return;
+    } else {
+      homeScreenItem = 0;
     }
     // menu screen
     showMenu();
@@ -224,13 +240,9 @@ public:
         menuPeriod(PSTR("Watering sunny  \n"), 
           (settings.wateringSunnyPeriod += nextItem));
         break;
-      case WATERING_NIGHT:
-        menuPeriod(PSTR("Watering night  \n"), 
-          (settings.wateringNightPeriod += nextItem));
-        break;
-      case WATERING_OTHER:
-        menuPeriod(PSTR("Watering evening\n"), 
-          (settings.wateringOtherPeriod += nextItem));
+      case WATERING:
+        menuPeriod(PSTR("Watering period \n"), 
+          (settings.wateringPeriod += nextItem));
         break;
       case MISTING_DURATION:
         fprintf_P(&lcd_out, PSTR("Misting duration\nfor {%2d} sec      "), 
@@ -240,13 +252,9 @@ public:
         menuPeriod(PSTR("Misting sunny   \n"),
           (settings.mistingSunnyPeriod += nextItem));
         break;
-      case MISTING_NIGHT:
-        menuPeriod(PSTR("Misting night   \n"), 
-          (settings.mistingNightPeriod += nextItem));
-        break;
-      case MISTING_OTHER:
-        menuPeriod(PSTR("Misting evening \n"), 
-          (settings.mistingOtherPeriod += nextItem));
+      case MISTING:
+        menuPeriod(PSTR("Misting period  \n"), 
+          (settings.mistingPeriod += nextItem));
         break;
       case LIGHT_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Light not less  \nthan {%4d} lux   "), 
@@ -260,12 +268,12 @@ public:
         fprintf_P(&lcd_out, PSTR("Light day from  \n"));
         if(editMode == false) {
           fprintf_P(&lcd_out, PSTR("%02d:%02d to %02d:%02d  "), 
-            settings.lightDayStart/60, settings.lightDayStart%60,
-            (settings.lightDayStart/60)+settings.lightDayDuration, 
-            settings.lightDayStart%60);
+            settings.lightDayStart/SEC_TO_MIN, settings.lightDayStart%SEC_TO_MIN,
+            (settings.lightDayStart/SEC_TO_MIN)+settings.lightDayDuration, 
+            settings.lightDayStart%SEC_TO_MIN);
         } else {
           fprintf_P(&lcd_out, PSTR("{%2d} o'clock      "), 
-            (settings.lightDayStart += (nextItem*60))/60);
+            (settings.lightDayStart += (nextItem*SEC_TO_MIN))/SEC_TO_MIN);
         }
         break;
       case HUMIDITY_MINIMUM:
@@ -288,12 +296,25 @@ public:
         fprintf_P(&lcd_out, PSTR("Substrate temp. \nless than {%2d}%c   "), 
           settings.subsTempMinimum += nextItem, C_CELCIUM);
         break;
+      case SILENT_NIGHT:
+        fprintf_P(&lcd_out, PSTR("Silent night    \n"));
+        if(editMode || editMode == 4) {
+          editMode = 4; // second item of enhanced edit menu
+          textBlinkPos(1, 5, 6);
+          settings.silentEvening += nextItem;
+        } else {
+          textBlinkPos(1, 12, 13);
+          settings.silentMorning += nextItem;
+        }
+        fprintf_P(&lcd_out, PSTR("from %2dh to %2dh"),
+          settings.silentEvening, settings.silentMorning);
+        break;
       case TEST:
         textBlink = true;
         if(editMode == false) {
           fprintf_P(&lcd_out, PSTR("Test all systems\n       -> {Start?}"));
           // disable test mode
-          if(settings.lightMinimum == 10000) {   
+          if(settings.lightMinimum == TEST_ENABLE) {   
             // restore previous settings
             settings = test;
           }
@@ -301,18 +322,18 @@ public:
           fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
           storage.changed = false;
           // enable test mode
-          if(settings.lightMinimum != 30000) {
+          if(settings.lightMinimum != TEST_ENABLE) {
             // save previous settings
             test = settings;
             // change settings for test
-            settings.lightMinimum = 30000; //lux
+            settings.lightMinimum = TEST_ENABLE;
             settings.lightDayDuration = 18; //hours
-            settings.mistingSunnyPeriod = 1; 
-            settings.mistingNightPeriod = 1;
-            settings.mistingOtherPeriod = 1; //min
-            settings.wateringSunnyPeriod = 3;
-            settings.wateringNightPeriod = 3;
-            settings.wateringOtherPeriod = 3; //min
+            settings.mistingSunnyPeriod = 1; // min
+            settings.mistingPeriod = 1; //min
+            settings.wateringSunnyPeriod = 3; // min
+            settings.wateringPeriod = 3; //min
+            settings.silentMorning = 0; // hour
+            settings.silentEvening = 24; // hour
 
             settings.wateringDuration = 5; //min
             settings.mistingDuration = 10; //sec
@@ -326,10 +347,9 @@ public:
         break;
       default:
         menuItem = HOME;
-        homeScreenItem = 0;
         break;
     }
-    nextItem = 0;
+    nextItem = false;
   }
 
 private:
@@ -403,36 +423,36 @@ private:
     uint8_t blinkFrom, blinkTo;
     switch (editMode) {
       case true:
-        editMode = 7;
-      case 7:
+        editMode = HOUR_SETTING;
+      case HOUR_SETTING:
         hour += nextItem;
         if(hour > 23)
           hour = 0;
         blinkFrom = 0;
         blinkTo = 1;
         break;
-      case 6:
+      case MINUTE_SETTING:
         minute += nextItem;
         if(minute > 59)
           minute = 0;
         blinkFrom = 3;
         blinkTo = 4;
         break;
-      case 5:
+      case DAY_SETTING:
         day += nextItem;
         if(day < 1 || day > 31)
           day = 1;
         blinkFrom = 6;
         blinkTo = 7;
         break;
-      case 4:
+      case MONTH_SETTING:
         month += nextItem;
         if(month < 1 || month > 12)
           month = 1;  
         blinkFrom = 9;
         blinkTo = 10;
         break;
-      case 3:
+      case YEAR_SETTING:
         year += nextItem;
         if(year < 2014 || year > 2024)
           year = 2014;
@@ -446,7 +466,7 @@ private:
 
   void menuPeriod(const char * __fmt, uint8_t _period) {
     fprintf_P(&lcd_out, __fmt);
-    if(_period > 0 || editMode > 0) {
+    if(_period > 0 || editMode != false) {
       fprintf_P(&lcd_out, PSTR("every {%3d} min   "), _period); 
     } else {
       fprintf_P(&lcd_out, PSTR("is disable      ")); 
@@ -463,7 +483,7 @@ private:
         return;
       case INFO_SUBSTRATE_FULL:
         fprintf_P(&lcd_out, PSTR("Substrate tank  \nis full! :)))   "));
-        backlightBlink(1);
+        backlightBlink(ONE_BLINK);
         return;
       case INFO_SUBSTRATE_DELIVERED:
         fprintf_P(&lcd_out, PSTR("Substrate was   \ndelivered! :))) "));
@@ -476,26 +496,26 @@ private:
         return;
       case WARNING_AIR_COLD:
         fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! {:(}  "));
-        beep.play(1);
+        beep.play(ONE_BEEP);
         return;
       case WARNING_AIR_HOT:
         fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! {:(}  "));
-        beep.play(1);
+        beep.play(ONE_BEEP);
         return;
       case WARNING_SUBSTRATE_COLD:
         fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! {:(}        "));
-        beep.play(2);
+        beep.play(TWO_BEEP);
         return;
       case WARNING_NO_WATER:
         fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! {:(}    "));
-        beep.play(1);
+        //beep.play(ONE_BEEP);
         return;
     }  
   }
 
   void showAlert() {
-    beep.play(5);
-    backlightBlink(1);
+    beep.play(FIVE_BEEP);
+    backlightBlink(ONE_BLINK);
     textBlink = true;
     lcd.home();
     switch (states[ERROR]) {

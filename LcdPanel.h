@@ -4,6 +4,9 @@
 #include "LcdMenu.h"
 #include "OneButton.h"
 
+static const int UP = 1;
+static const int DOWN = -1;
+
 // Declare lcd menu
 LcdMenu menu;
 
@@ -12,29 +15,27 @@ OneButton rightButton(A2, true);
 OneButton leftButton(A3, true);
 
 void rightButtonClick() {
-  menu.nextItem = 1;
+  menu.nextItem = UP;
   menu.show();
 }
 
 void leftButtonClick() {
-  menu.nextItem = -1;
+  menu.nextItem = DOWN;
   menu.show();
 }
 
 void buttonsLongPress() {
-  beep.play(2);
-  if(menu.editMode != 0) {
+  beep.play(TWO_BEEP);
+  if(menu.editMode != false) {
     // move to next edit field
     menu.editMode--;
     if(menu.menuItem == CLOCK)
       // save changed time
       rtc.adjust(clock);
   } else if(menu.menuItem != HOME) {
-    // enable edit mode
-    menu.editMode = 1;
+    menu.editMode = true;
   } else {
-    // close Edit menu
-    menu.editMode = 0;
+    menu.editMode = false;
   }
   menu.show();
 }

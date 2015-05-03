@@ -60,6 +60,9 @@ static const uint8_t SUBSTRATE_LEVELPIN = A7;
 static const uint8_t PUMP_WATERINGPIN = 4;
 static const uint8_t PUMP_MISTINGPIN = 5;
 static const uint8_t LAMPPIN = 7;
+// Define relay states
+static const uint8_t RELAY_ON = 0;
+static const uint8_t RELAY_OFF = 1;
 
 /****************************************************************************/
 
@@ -73,9 +76,9 @@ void setup()
   fdev_setup_stream(&serial_out, serial_putchar, NULL, _FDEV_SETUP_WRITE);
   stdout = stderr = &serial_out;
   // prevent continiously restart
-  delay(500);
-  // restart if memory lower 512 bytes
-  softResetMem(512);
+  delay(500); // millis
+  // restart if low memory
+  softResetMem(512); // bytes
   // restart after freezing for 8 sec
   softResetTimeout();
   #ifdef MESH
@@ -94,7 +97,7 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  if(millis() - timerFast >= 1000) {
+  if(millis() - timerFast >= MILLIS_TO_SEC) {
     timerFast = millis();
     // check level sensors
     check_levels();
@@ -103,7 +106,7 @@ void loop()
     // update misting
     misting();
     // timer fo 1 min
-    if(timerFast - timerSlow >= 60000) {
+    if(timerFast - timerSlow >= 60*MILLIS_TO_SEC) {
       timerSlow = timerFast;
       // system check
       check();
@@ -168,9 +171,9 @@ void loop()
         printf_P(PSTR("MESH: INFO: Sending %d byte to %d\n\r"), len, macAddress);
       #endif
       rf24sendPacket(message, len, macAddress);
-      return 1;
+      return true;
     }
-    return 0;
+    return false;
   }
 
   void onCommandReceived(uint8_t command, void* data, uint8_t dataLen) {
@@ -265,7 +268,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/1000 > lastWatering + 180)
+    if(millis()/MILLIS_TO_SEC > lastWatering + 180)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -302,7 +305,7 @@ void relayOn(uint8_t relay) {
     // relay is already on
     return;
   }
-  bool status = relays(relay, 0); // 0 is ON
+  bool status = relays(relay, RELAY_ON);
   if(status) {
     #ifdef DEBUG_RELAY
       printf_P(PSTR("RELAY: Info: '%s' is enabled.\n\r"), relay);
@@ -316,7 +319,7 @@ void relayOff(uint8_t relay) {
     // relay is already off
     return;
   }
-  bool status = relays(relay, 1); // 1 is OFF
+  bool status = relays(relay, RELAY_OFF);
   if(status) {
     #ifdef DEBUG_RELAY
       printf_P(PSTR("RELAY: Info: '%s' is disabled.\n\r"), relay);
@@ -351,7 +354,7 @@ void check() {
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
-  // check memory
+  // check if memory less than 600 bytes
   if(freeMemory() < 600) {
     states[ERROR] = ERROR_LOW_MEMORY;
     return;
@@ -424,9 +427,10 @@ void doWork() {
   } else if(states[HUMIDITY] >= settings.humidMaximum) {
     speed *= 2; // do work twice rarely
   }
-  // sunny time (11-16 o'clock) + light
-  if(11 <= clock.hour() && clock.hour() < 16 && 
-      states[LIGHT] >= 2500) {
+  // sunny time
+  if(states[LIGHT] >= 2500 &&
+      settings.silentMorning <= clock.hour() && 
+      clock.hour() < settings.silentEvening) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
@@ -434,29 +438,33 @@ void doWork() {
     checkMistingPeriod(settings.mistingSunnyPeriod, speed);
     return;
   }
-  // night time (20-8 o'clock) + light
-  if((20 <= clock.hour() || clock.hour() < 8) && 
-      states[LIGHT] <= settings.lightMinimum) {
+  // night time
+  if(states[LIGHT] <= settings.lightMinimum && 
+      (settings.silentEvening <= clock.hour() || 
+      clock.hour() < settings.silentMorning)) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
-    checkWateringPeriod(settings.wateringNightPeriod, speed);
-    checkMistingPeriod(settings.mistingNightPeriod, speed);
+    // nothing, silent night
     return;
   }
   // other time period
-  checkWateringPeriod(settings.wateringOtherPeriod, speed);
-  checkMistingPeriod(settings.mistingOtherPeriod, speed);
+  checkWateringPeriod(settings.wateringPeriod, speed);
+  checkMistingPeriod(settings.mistingPeriod, speed);
 }
 
 void checkWateringPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/1000 > lastWatering + (_period * _time))
-    startWatering = millis()/1000;
+  if(_period != 0 && millis()/MILLIS_TO_SEC > lastWatering + (_period * _time)) {
+    startWatering = millis()/MILLIS_TO_SEC;
+    beep.play(ONE_BEEP);
+  }
 }
 
 void checkMistingPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/1000 > lastMisting + (_period * _time))
+  if(_period != 0 && millis()/MILLIS_TO_SEC > lastMisting + (_period * _time)) {
     startMisting = settings.mistingDuration;
+    beep.play(ONE_BEEP);
+  }
 }
 
 void doLight() { 
@@ -533,7 +541,7 @@ void misting() {
   #endif
   states[WARNING] = WARNING_MISTING;
   startMisting--;
-  lastMisting = millis()/1000;
+  lastMisting = millis()/MILLIS_TO_SEC;
   relayOn(PUMP_MISTING);
 }
 
@@ -543,7 +551,7 @@ void watering() {
     return;
   }
   // time is over
-  if(startWatering + (settings.wateringDuration*60) <= millis()/1000 || 
+  if(startWatering + (settings.wateringDuration*60) <= millis()/MILLIS_TO_SEC || 
       states[ERROR] == ERROR_NO_SUBSTRATE) {
     // stop watering
     if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
@@ -569,9 +577,9 @@ void watering() {
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED ||
       states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 19;
+    pauseDuration = 19; // max officient pause
   // pause every 30 sec
-  if((millis()/1000-startWatering) % 30 <= pauseDuration) {
+  if((millis()/MILLIS_TO_SEC-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -582,6 +590,6 @@ void watering() {
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
   states[WARNING] = WARNING_WATERING;
-  lastWatering = millis()/1000;
+  lastWatering = millis()/MILLIS_TO_SEC;
   relayOn(PUMP_WATERING);
 }

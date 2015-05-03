@@ -3,6 +3,10 @@
 
 #include "pitches.h"
 
+static const uint8_t ONE_BEEP = 1;
+static const uint8_t TWO_BEEP = 2;
+static const uint8_t FIVE_BEEP = 5;
+
 const uint16_t notes[] = { N_A5, N_E5, N_REST };
 const uint8_t beats[] = { 2, 2, 4 };
 const uint8_t tempo = 25;
