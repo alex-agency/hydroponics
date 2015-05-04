@@ -223,7 +223,7 @@ public:
   }
 
   void showMenu() {
-    if(editMode) {
+    if(editMode != false) {
       // enable blink for edit mode
       textBlink = true;
       // requested save settings
@@ -285,29 +285,34 @@ public:
           settings.humidMaximum += nextItem);
         break;
       case AIR_TEMP_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Temp. air not   \nless than {%2d}%c   "), 
+        fprintf_P(&lcd_out, PSTR("Air temper. not \nless than {%2d}%c   "), 
           settings.airTempMinimum += nextItem, C_CELCIUM);
         break;
       case AIR_TEMP_MAXIMUM:
-        fprintf_P(&lcd_out, PSTR("Temp. air not   \ngreater than {%2d}%c"), 
+        fprintf_P(&lcd_out, PSTR("Air temper. not \ngreater than {%2d}%c"), 
           settings.airTempMaximum += nextItem, C_CELCIUM);
         break;
       case SUBSTRATE_TEMP_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Substrate temp. \nless than {%2d}%c   "), 
+        fprintf_P(&lcd_out, PSTR("Substrate not   \nless than {%2d}%c   "), 
           settings.subsTempMinimum += nextItem, C_CELCIUM);
         break;
       case SILENT_NIGHT:
         fprintf_P(&lcd_out, PSTR("Silent night    \n"));
-        if(editMode || editMode == 4) {
-          editMode = 4; // second item of enhanced edit menu
-          textBlinkPos(1, 5, 6);
+        uint8_t blinkFrom, blinkTo;
+        if(editMode == true || editMode == 4) {
+          editMode = 4;
+          blinkFrom = 5;
+          blinkTo = 6;
           settings.silentEvening += nextItem;
         } else {
-          textBlinkPos(1, 12, 13);
+          blinkFrom = 12;
+          blinkTo = 13;
           settings.silentMorning += nextItem;
         }
-        fprintf_P(&lcd_out, PSTR("from %2dh to %2dh"),
+        fprintf_P(&lcd_out, PSTR("from %2dh to %2d}h "),
           settings.silentEvening, settings.silentMorning);
+        if(editMode != false)
+          textBlinkPos(1, blinkFrom, blinkTo);
         break;
       case TEST:
         textBlink = true;
@@ -335,7 +340,7 @@ public:
             settings.silentMorning = 0; // hour
             settings.silentEvening = 24; // hour
 
-            settings.wateringDuration = 5; //min
+            settings.wateringDuration = 2; //min
             settings.mistingDuration = 10; //sec
           }
         }

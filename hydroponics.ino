@@ -105,7 +105,7 @@ void loop()
     watering();
     // update misting
     misting();
-    // timer fo 1 min
+    // timer for 1 min
     if(timerFast - timerSlow >= 60*MILLIS_TO_SEC) {
       timerSlow = timerFast;
       // system check
