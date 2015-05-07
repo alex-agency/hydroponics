@@ -199,6 +199,10 @@ public:
       textBlink = false;
       editMode = false;
     }
+    if(menuItem != HOME) {
+      // reset home screen
+      homeScreenItem = 0;  
+    }
     // error screen
     if(states[ERROR] != NO_ERROR && 
         lastTouch+TEN_SEC <= lastUpdate) {
@@ -215,8 +219,6 @@ public:
     if(menuItem == HOME) {
       homeScreen();
       return;
-    } else {
-      homeScreenItem = 0;
     }
     // menu screen
     showMenu();
@@ -493,11 +495,9 @@ private:
       case INFO_SUBSTRATE_DELIVERED:
         fprintf_P(&lcd_out, PSTR("Substrate was   \ndelivered! :))) "));
         return;
-      case WARNING_WATERING:
-        fprintf_P(&lcd_out, PSTR("Watering...     \n{Please wait.}    "));
-        return;
-      case WARNING_MISTING:
-        fprintf_P(&lcd_out, PSTR("Misting...      \nPlease wait.    "));
+      case WARNING_SUBSTRATE_COLD:
+        fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! {:(}        "));
+        beep.play(TWO_BEEP);
         return;
       case WARNING_AIR_COLD:
         fprintf_P(&lcd_out, PSTR("Air is too cold \nfor plants! {:(}  "));
@@ -507,13 +507,15 @@ private:
         fprintf_P(&lcd_out, PSTR("Air is too hot \nfor plants! {:(}  "));
         beep.play(ONE_BEEP);
         return;
-      case WARNING_SUBSTRATE_COLD:
-        fprintf_P(&lcd_out, PSTR("Substrate is too\ncold! {:(}        "));
-        beep.play(TWO_BEEP);
-        return;
       case WARNING_NO_WATER:
         fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! {:(}    "));
         //beep.play(ONE_BEEP);
+        return;                
+      case WARNING_WATERING:
+        fprintf_P(&lcd_out, PSTR("Watering...     \n{Please wait.}    "));
+        return;
+      case WARNING_MISTING:
+        fprintf_P(&lcd_out, PSTR("Misting...      \nPlease wait.    "));
         return;
     }  
   }

@@ -420,13 +420,6 @@ void doWork() {
   	  states[ERROR] != ERROR_NO_SUBSTRATE) {
     return;
   }
-  uint8_t speed = 60; // sec per min
-  // check humidity
-  if(states[HUMIDITY] <= settings.humidMinimum) {
-    speed /= 2; // do work twice often
-  } else if(states[HUMIDITY] >= settings.humidMaximum) {
-    speed *= 2; // do work twice rarely
-  }
   // sunny time
   if(states[LIGHT] >= 2500 &&
       settings.silentMorning <= clock.hour() && 
@@ -434,14 +427,12 @@ void doWork() {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
-    checkWateringPeriod(settings.wateringSunnyPeriod, speed);
-    checkMistingPeriod(settings.mistingSunnyPeriod, speed);
+    checkTime(settings.wateringSunnyPeriod, settings.mistingSunnyPeriod);
     return;
   }
   // night time
-  if(states[LIGHT] <= settings.lightMinimum && 
-      (settings.silentEvening <= clock.hour() || 
-      clock.hour() < settings.silentMorning)) {
+  if(settings.silentEvening <= clock.hour() || 
+      clock.hour() < settings.silentMorning) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
@@ -449,21 +440,34 @@ void doWork() {
     return;
   }
   // other time period
-  checkWateringPeriod(settings.wateringPeriod, speed);
-  checkMistingPeriod(settings.mistingPeriod, speed);
+  checkTime(settings.wateringPeriod, settings.mistingPeriod);
 }
 
-void checkWateringPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/MILLIS_TO_SEC > lastWatering + (_period * _time)) {
-    startWatering = millis()/MILLIS_TO_SEC;
-    beep.play(ONE_BEEP);
+void checkTime(uint8_t _wateringMinute, uint8_t _mistingMinute) {
+  uint8_t secPerMin = 60;
+  // check humidity
+  if(states[HUMIDITY] <= settings.humidMinimum) {
+    secPerMin /= 2; // twice often, one minute = 30 sec
+  } else if(states[HUMIDITY] >= settings.humidMaximum) {
+    secPerMin *= 2; // twice rarely, on minute = 120 sec
   }
-}
+  unsigned long nextWatering = lastWatering + (_wateringMinute * secPerMin);
+  unsigned long nextMisting = lastMisting + (_mistingMinute * secPerMin);
 
-void checkMistingPeriod(uint8_t _period, uint8_t _time) {
-  if(_period != 0 && millis()/MILLIS_TO_SEC > lastMisting + (_period * _time)) {
-    startMisting = settings.mistingDuration;
+  if(_wateringMinute != 0 && millis()/MILLIS_TO_SEC > nextWatering-2) {
+    // beep before 2 sec
     beep.play(ONE_BEEP);
+    // start on time    
+    if(millis()/MILLIS_TO_SEC > nextWatering)
+      startWatering = millis()/MILLIS_TO_SEC;
+  }
+
+  if(_mistingMinute != 0 && millis()/MILLIS_TO_SEC > nextMisting-2) {
+    // beep before 2 sec
+    beep.play(ONE_BEEP);
+    // start on time
+    if(millis()/MILLIS_TO_SEC > nextMisting)
+      startMisting = settings.mistingDuration;
   }
 }
 
