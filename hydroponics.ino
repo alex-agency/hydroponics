@@ -191,13 +191,19 @@ bool read_DHT() {
   states[AIR_TEMP] = dht.readTemperature();
 
   if( isnan(states[HUMIDITY]) || isnan(states[AIR_TEMP]) ) {
-    #ifdef DEBUG_DHT11
-      printf_P(PSTR("DHT11: Error: Communication failed!\n\r"));
+    #ifdef DEBUG_DHT
+      printf_P(PSTR("DHT Sensor: Error: Communication failed!\n\r"));
     #endif
     return false;
   }
-  #ifdef DEBUG_DHT11
-    printf_P(PSTR("DHT11: Info: Air humidity: %d, temperature: %dC.\n\r"), 
+  if(states[HUMIDITY] == 95 || states[AIR_TEMP] == 50) {
+    #ifdef DEBUG_DHT
+      printf_P(PSTR("DHT Sensor: Error: sensor broken!\n\r"));
+    #endif
+    return false;    
+  }
+  #ifdef DEBUG_DHT
+    printf_P(PSTR("DHT Sensor: Info: Air humidity: %d, temperature: %dC.\n\r"), 
       states[HUMIDITY], states[AIR_TEMP]);
   #endif
   return true;
@@ -414,12 +420,6 @@ void check() {
 }
 
 void doWork() {
-  // don't do any work while error
-  if(states[ERROR] != NO_ERROR && 
-  	  // skip no substrate error
-  	  states[ERROR] != ERROR_NO_SUBSTRATE) {
-    return;
-  }
   // sunny time
   if(states[LIGHT] >= 2500 &&
       settings.silentMorning <= clock.hour() && 
@@ -427,7 +427,7 @@ void doWork() {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
-    checkTime(settings.wateringSunnyPeriod, settings.mistingSunnyPeriod);
+    checkTimer(settings.wateringSunnyPeriod, settings.mistingSunnyPeriod);
     return;
   }
   // night time
@@ -440,10 +440,10 @@ void doWork() {
     return;
   }
   // other time period
-  checkTime(settings.wateringPeriod, settings.mistingPeriod);
+  checkTimer(settings.wateringPeriod, settings.mistingPeriod);
 }
 
-void checkTime(uint8_t _wateringMinute, uint8_t _mistingMinute) {
+void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
   uint8_t secPerMin = 60;
   // check humidity
   if(states[HUMIDITY] <= settings.humidMinimum) {
@@ -451,27 +451,22 @@ void checkTime(uint8_t _wateringMinute, uint8_t _mistingMinute) {
   } else if(states[HUMIDITY] >= settings.humidMaximum) {
     secPerMin *= 2; // twice rarely, on minute = 120 sec
   }
-  unsigned long nextWatering = lastWatering + (_wateringMinute * secPerMin);
-  unsigned long nextMisting = lastMisting + (_mistingMinute * secPerMin);
-
-  if(_wateringMinute != 0 && millis()/MILLIS_TO_SEC > nextWatering-2) {
-    // beep before 2 sec
-    beep.play(ONE_BEEP);
-    // start on time    
-    if(millis()/MILLIS_TO_SEC > nextWatering)
-      startWatering = millis()/MILLIS_TO_SEC;
+  if(_wateringMinute != 0 && millis()/MILLIS_TO_SEC > 
+      lastWatering + (_wateringMinute * secPerMin)) {
+    startWatering = millis()/MILLIS_TO_SEC;
   }
-
-  if(_mistingMinute != 0 && millis()/MILLIS_TO_SEC > nextMisting-2) {
-    // beep before 2 sec
-    beep.play(ONE_BEEP);
-    // start on time
-    if(millis()/MILLIS_TO_SEC > nextMisting)
-      startMisting = settings.mistingDuration;
+  if(_mistingMinute != 0 && millis()/MILLIS_TO_SEC > 
+      lastMisting + (_mistingMinute * secPerMin)) {
+    startMisting = settings.mistingDuration;
   }
 }
 
 void doLight() { 
+  if(states[ERROR] != NO_ERROR) {
+    // turn off lamp
+    relayOff(LAMP);
+    return;
+  }
   // try to up temperature
   if(states[AIR_TEMP] <= settings.airTempMinimum &&
       states[LIGHT] > 100) {
@@ -527,8 +522,7 @@ void doLight() {
 }
 
 void misting() {
-  if(startMisting == 0 || 
-      states[WARNING] == WARNING_NO_WATER) {
+  if(startMisting == 0 || states[WARNING] == WARNING_NO_WATER) {
     // stop misting
     if(states[PUMP_MISTING]) {
       #ifdef DEBUG
@@ -543,7 +537,11 @@ void misting() {
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Misting...\n\r"));
   #endif
-  states[WARNING] = WARNING_MISTING;
+  if(states[WARNING] != WARNING_MISTING) {
+    beep.play(FIVE_BEEP);
+    states[WARNING] = WARNING_MISTING;
+    return;
+  }
   startMisting--;
   lastMisting = millis()/MILLIS_TO_SEC;
   relayOn(PUMP_MISTING);
@@ -593,7 +591,11 @@ void watering() {
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
-  states[WARNING] = WARNING_WATERING;
+  if(states[WARNING] != WARNING_WATERING) {
+    beep.play(TWO_BEEP);
+    states[WARNING] = WARNING_WATERING;
+    return;
+  }
   lastWatering = millis()/MILLIS_TO_SEC;
   relayOn(PUMP_WATERING);
 }
