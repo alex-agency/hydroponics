@@ -337,12 +337,12 @@ public:
             settings.lightDayDuration = 18; //hours
             settings.mistingSunnyPeriod = 1; // min
             settings.mistingPeriod = 1; //min
-            settings.wateringSunnyPeriod = 3; // min
-            settings.wateringPeriod = 3; //min
+            settings.wateringSunnyPeriod = 2; // min
+            settings.wateringPeriod = 2; //min
             settings.silentMorning = 0; // hour
             settings.silentEvening = 24; // hour
 
-            settings.wateringDuration = 2; //min
+            settings.wateringDuration = 1; //min
             settings.mistingDuration = 10; //sec
           }
         }
