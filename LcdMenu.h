@@ -187,6 +187,8 @@ public:
         lcd.setBacklight(true);
         // reset click
         nextItem = false;
+        // reset home screen
+        homeScreenItem = 0; 
         return;
       }
     } 

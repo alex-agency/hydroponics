@@ -44,7 +44,7 @@ LcdPanel panel;
 #define DHTTYPE DHT11
 
 // Declare variables
-unsigned long timerFast, timerSlow, lastMisting, lastWatering;
+unsigned long timerSec, timer100sec, timerMin, lastMisting, lastWatering;
 uint16_t sunrise;
 uint8_t startMisting;
 unsigned long startWatering;
@@ -97,8 +97,8 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  if(millis() - timerFast >= MILLIS_TO_SEC) {
-    timerFast = millis();
+  if(millis() - timerSec >= MILLIS_TO_SEC) {
+    timerSec = millis();
     // check level sensors
     check_levels();
     // update watering
@@ -106,10 +106,10 @@ void loop()
     // update misting
     misting();
     // timer for 1 min
-    if(timerFast - timerSlow >= 60*MILLIS_TO_SEC) {
-      timerSlow = timerFast;
+    if(timerSec - timerMin >= 60*MILLIS_TO_SEC) {
+      timerMin = timerSec;
       // system check
-      check();
+      checkSystem();
       // manage light
       doLight();
       // manage misting and watering
@@ -150,6 +150,12 @@ void loop()
         sendCommand( ERROR, (void*) states[ERROR], 
           sizeof(states[ERROR]) );*/
       #endif
+    }
+    // timer for 100 sec
+    if(timerSec - timer100sec >= 100*MILLIS_TO_SEC) {
+      timer100sec = timerSec;
+      // check sensors
+      checkSensors();
     }
   }
   // update LCD 
@@ -356,7 +362,7 @@ bool relays(uint8_t relay, uint8_t state) {
   return false;
 }
 
-void check() {
+void checkSystem() {
   #ifdef DEBUG
     printf_P(PSTR("Free memory: %d bytes.\n\r"), freeMemory());
   #endif
@@ -385,6 +391,9 @@ void check() {
     states[ERROR] = ERROR_EEPROM;
     return;
   }
+}
+
+void checkSensors() {
   // read DHT sensor
   if(read_DHT() == false) {
     states[ERROR] = ERROR_DHT;
@@ -402,7 +411,7 @@ void check() {
   }
   // reset error
   states[ERROR] = NO_ERROR;
-
+  
   // check substrate temperature
   if(states[SUBSTRATE_TEMP] <= settings.subsTempMinimum) {
     states[WARNING] = WARNING_SUBSTRATE_COLD;
@@ -538,7 +547,7 @@ void misting() {
     printf_P(PSTR("Misting: Info: Misting...\n\r"));
   #endif
   if(states[WARNING] != WARNING_MISTING) {
-    beep.play(FIVE_BEEP);
+    beep.play(TWO_BEEP);
     states[WARNING] = WARNING_MISTING;
     return;
   }
@@ -591,8 +600,9 @@ void watering() {
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
-  if(states[WARNING] != WARNING_WATERING) {
-    beep.play(TWO_BEEP);
+  if(states[WARNING] != WARNING_WATERING && 
+      states[WARNING] != WARNING_SUBSTRATE_LOW) {
+    beep.play(ONE_BEEP);
     states[WARNING] = WARNING_WATERING;
     return;
   }
