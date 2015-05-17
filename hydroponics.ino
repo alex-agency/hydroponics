@@ -429,6 +429,10 @@ void checkSensors() {
 }
 
 void doWork() {
+  // don't use cold water
+  if(states[WARNING] == WARNING_SUBSTRATE_COLD) {
+    return;
+  }
   // sunny time
   if(states[LIGHT] >= 2500 &&
       settings.silentMorning <= clock.hour() && 
@@ -453,16 +457,16 @@ void doWork() {
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
+  if(_wateringMinute != 0 && millis()/MILLIS_TO_SEC > 
+      lastWatering + (_wateringMinute * 60)) {
+    startWatering = millis()/MILLIS_TO_SEC;
+  }
   uint8_t secPerMin = 60;
   // check humidity
   if(states[HUMIDITY] <= settings.humidMinimum) {
     secPerMin /= 2; // twice often, one minute = 30 sec
   } else if(states[HUMIDITY] >= settings.humidMaximum) {
     secPerMin *= 2; // twice rarely, on minute = 120 sec
-  }
-  if(_wateringMinute != 0 && millis()/MILLIS_TO_SEC > 
-      lastWatering + (_wateringMinute * secPerMin)) {
-    startWatering = millis()/MILLIS_TO_SEC;
   }
   if(_mistingMinute != 0 && millis()/MILLIS_TO_SEC > 
       lastMisting + (_mistingMinute * secPerMin)) {
@@ -546,7 +550,7 @@ void misting() {
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Misting...\n\r"));
   #endif
-  if(states[WARNING] != WARNING_MISTING) {
+  if(states[WARNING] == NO_WARNING) {
     beep.play(TWO_BEEP);
     states[WARNING] = WARNING_MISTING;
     return;
@@ -600,8 +604,7 @@ void watering() {
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
-  if(states[WARNING] != WARNING_WATERING && 
-      states[WARNING] != WARNING_SUBSTRATE_LOW) {
+  if(states[WARNING] == NO_WARNING) {
     beep.play(ONE_BEEP);
     states[WARNING] = WARNING_WATERING;
     return;

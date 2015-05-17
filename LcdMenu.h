@@ -178,6 +178,12 @@ public:
   }
 
   void show() {
+    if(menuItem != HOME || 
+        states[WARNING] != NO_WARNING ||
+        states[ERROR] != NO_ERROR) {
+      // reset home screen
+      homeScreenItem = 0;  
+    }  
     // check button click
     if(nextItem != false) {
       lastTouch = millis()/MILLIS_TO_SEC;
@@ -187,8 +193,6 @@ public:
         lcd.setBacklight(true);
         // reset click
         nextItem = false;
-        // reset home screen
-        homeScreenItem = 0; 
         return;
       }
     } 
@@ -200,10 +204,6 @@ public:
       nextItem = false;
       textBlink = false;
       editMode = false;
-    }
-    if(menuItem != HOME) {
-      // reset home screen
-      homeScreenItem = 0;  
     }
     // error screen
     if(states[ERROR] != NO_ERROR && 
