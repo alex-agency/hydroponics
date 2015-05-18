@@ -66,8 +66,8 @@ static const uint8_t RELAY_OFF = 1;
 
 // DS18B20 sensors address
 const byte ds18b20Address[2][8] PROGMEM = {
-     0x28, 0xB1, 0x6D, 0xA1, 0x3, 0x0, 0x0, 0x11,
-     0x28, 0x87, 0x6A, 0xA1, 0x3, 0x0, 0x0, 0x1F
+     0x28, 0x28, 0x88, 0xD6, 0x05, 0x00, 0x00, 0xC1,
+     0x28, 0xFF, 0xA8, 0x0C, 0x11, 0x14, 0x00, 0x61
 };
 // 1-Wire object
 OneWire onewire(ONE_WIRE_BUS);
@@ -246,10 +246,11 @@ bool read_DS18B20() {
     #endif
     return false;
   }
-  #ifdef DEBUG_DS18B20
-    printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
-  #endif
   states[COMPUTER_TEMP] = value;
+  #ifdef DEBUG_DS18B20
+    printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), 
+      states[COMPUTER_TEMP]);
+  #endif
   // read substrate sensor
   value = ds18b20.readTemperature(FA(ds18b20Address[1]));
   if(value == TEMP_ERROR) {
@@ -258,10 +259,11 @@ bool read_DS18B20() {
     #endif
     return false;
   }
-  #ifdef DEBUG_DS18B20
-    printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
-  #endif
   states[SUBSTRATE_TEMP] = value;
+  #ifdef DEBUG_DS18B20
+    printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), 
+      states[SUBSTRATE_TEMP]);
+  #endif
   // request all sensors for measurement
   return ds18b20.request();
 }

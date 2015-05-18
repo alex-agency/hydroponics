@@ -66,15 +66,6 @@ bool DS18B20::begin(uint8_t quality)
       parasiteDevices++;
 
     devices++;
-    #ifdef DEBUG
-      // Device address finder
-      Serial.print(F("DS18B20 device address: "));
-      for( i = 1; i < 7; i++) {
-        Serial.print(address[i], HEX);
-        Serial.print(':');
-      }
-      Serial.println(); 
-    #endif
   }
 
   if (parasiteDevices == devices || parasiteDevices == 0)
