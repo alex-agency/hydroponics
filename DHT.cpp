@@ -3,6 +3,7 @@
 MIT license
 written by Adafruit Industries
 */
+// Modified by SeeedStudio, public domain 
 
 #include "DHT.h"
 
@@ -46,6 +47,7 @@ float DHT::readTemperature(bool S) {
       return f;
     }
   }
+  Serial.print("Read fail");
   return NAN;
 }
 
@@ -69,102 +71,96 @@ float DHT::readHumidity(void) {
       return f;
     }
   }
+  Serial.print("Read fail");
   return NAN;
 }
+uint8_t DHT::read_dht11_dat(void)
+{
+  byte i = 0;
+  byte result=0;
+  for(i=0; i< 8; i++){
+    while(!digitalRead(_pin));  // wait for 50us
+    delayMicroseconds(30);
 
-float DHT::computeHeatIndex(float tempFahrenheit, float percentHumidity) {
-  // Adapted from equation at: https://github.com/adafruit/DHT-sensor-library/issues/9 and
-  // Wikipedia: http://en.wikipedia.org/wiki/Heat_index
-  return -42.379 + 
-           2.04901523 * tempFahrenheit + 
-          10.14333127 * percentHumidity +
-          -0.22475541 * tempFahrenheit*percentHumidity +
-          -0.00683783 * pow(tempFahrenheit, 2) +
-          -0.05481717 * pow(percentHumidity, 2) + 
-           0.00122874 * pow(tempFahrenheit, 2) * percentHumidity + 
-           0.00085282 * tempFahrenheit*pow(percentHumidity, 2) +
-          -0.00000199 * pow(tempFahrenheit, 2) * pow(percentHumidity, 2);
+    if(digitalRead(_pin)) 
+      result |=(1<<(7-i));
+    while(digitalRead(_pin));  // wait '1' finish
+  }
+  return result;
 }
-
 
 boolean DHT::read(void) {
   uint8_t laststate = HIGH;
   uint8_t counter = 0;
   uint8_t j = 0, i;
   unsigned long currenttime;
+  digitalWrite(_pin, HIGH);
+  delay(250);
 
-  // Check if sensor was read less than two seconds ago and return early
-  // to use last reading.
   currenttime = millis();
-  if (currenttime < _lastreadtime) {
-    // ie there was a rollover
+  if (currenttime < _lastreadtime) {  
     _lastreadtime = 0;
   }
   if (!firstreading && ((currenttime - _lastreadtime) < 2000)) {
     return true; // return last correct measurement
-    //delay(2000 - (currenttime - _lastreadtime));
   }
   firstreading = false;
-  /*
-    Serial.print("Currtime: "); Serial.print(currenttime);
-    Serial.print(" Lasttime: "); Serial.print(_lastreadtime);
-  */
   _lastreadtime = millis();
 
   data[0] = data[1] = data[2] = data[3] = data[4] = 0;
   
-  // pull the pin high and wait 250 milliseconds
-  digitalWrite(_pin, HIGH);
-  delay(250);
-
-  // now pull it low for ~20 milliseconds
+  
   pinMode(_pin, OUTPUT);
   digitalWrite(_pin, LOW);
-  delay(20);
-  noInterrupts();
+  delay(10);
+ // cli();
   digitalWrite(_pin, HIGH);
   delayMicroseconds(40);
+  //delay(1);
   pinMode(_pin, INPUT);
-
-  // read in timings
-  for ( i=0; i< MAXTIMINGS; i++) {
-    counter = 0;
-    while (digitalRead(_pin) == laststate) {
-      counter++;
-      delayMicroseconds(1);
-      if (counter == 255) {
-        break;
-      }
-    }
-    laststate = digitalRead(_pin);
-
-    if (counter == 255) break;
-
-    // ignore first 3 transitions
-    if ((i >= 4) && (i%2 == 0)) {
-      // shove each bit into the storage bytes
-      data[j/8] <<= 1;
-      if (counter > _count)
-        data[j/8] |= 1;
-      j++;
-    }
-
+  while(digitalRead(_pin)){
+    Serial.println("dht11 start condition 1 not met");
   }
+  delayMicroseconds(80);
 
-  interrupts();
+  while(!digitalRead(_pin)){
+    Serial.println("dht11 start condition 2 not met");
+  }
+  delayMicroseconds(80);
   
-  /*
-  Serial.println(j, DEC);
-  Serial.print(data[0], HEX); Serial.print(", ");
-  Serial.print(data[1], HEX); Serial.print(", ");
-  Serial.print(data[2], HEX); Serial.print(", ");
-  Serial.print(data[3], HEX); Serial.print(", ");
-  Serial.print(data[4], HEX); Serial.print(" =? ");
-  Serial.println(data[0] + data[1] + data[2] + data[3], HEX);
-  */
+  for (i=0; i<5; i++){
+    data[i] = read_dht11_dat();
+	}
+ 
+  // for ( i=0; i< MAXTIMINGS; i++) {
+    // counter = 0;
+    // while (digitalRead(_pin) == laststate) {
+      // counter++;
+      // delayMicroseconds(1);
+	  // //delay(1);
+      // if (counter == 255) {
+        // break;
+      // }
+    // }
+    // laststate = digitalRead(_pin);
+
+    // if (counter == 255) break; // ignore first 3 transitions
+    // if ((i >= 4) && (i%2 == 0)) {
+      // data[j/8] <<= 1;
+      // if (counter > _count)
+        // data[j/8] |= 1;
+      // j++;
+    // }
+	
+  // }
+
+  //sei();
+  
+  
 
   // check we read 40 bits and that the checksum matches
-  if ((j >= 40) && 
+ // if ((j >= 40) && 
+ if (
       (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) ) {
     return true;
   }

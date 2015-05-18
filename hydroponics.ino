@@ -64,6 +64,16 @@ static const uint8_t LAMPPIN = 7;
 static const uint8_t RELAY_ON = 0;
 static const uint8_t RELAY_OFF = 1;
 
+// DS18B20 sensors address
+const byte ds18b20Address[2][8] PROGMEM = {
+     0x28, 0xB1, 0x6D, 0xA1, 0x3, 0x0, 0x0, 0x11,
+     0x28, 0x87, 0x6A, 0xA1, 0x3, 0x0, 0x0, 0x1F
+};
+// 1-Wire object
+OneWire onewire(ONE_WIRE_BUS);
+// DS18B20 sensors object
+DS18B20 ds18b20(&onewire);
+
 /****************************************************************************/
 
 //
@@ -85,6 +95,10 @@ void setup()
     // initialize network
     rf24init();
   #endif
+  // initialize DS18B20 with 9 bits resolution
+  ds18b20.begin(9);
+  // request all sensors for measurement
+  ds18b20.request();
   // initialize lcd panel
   panel.begin();
 }
@@ -156,6 +170,10 @@ void loop()
       timer100sec = timerSec;
       // check sensors
       checkSensors();
+      #ifdef DEBUG
+        printf_P(PSTR("Loop: Info: Check sensors take: %dms\n\r"),
+          millis()-timerSec);
+      #endif
     }
   }
   // update LCD 
@@ -202,7 +220,7 @@ bool read_DHT() {
     #endif
     return false;
   }
-  if(states[HUMIDITY] == 95 || states[AIR_TEMP] == 50) {
+  if(states[HUMIDITY] >= 95 || states[AIR_TEMP] >= 50) {
     #ifdef DEBUG_DHT
       printf_P(PSTR("DHT Sensor: Error: sensor broken!\n\r"));
     #endif
@@ -216,12 +234,15 @@ bool read_DHT() {
 }
 
 bool read_DS18B20() {
-  DS18B20 ds(ONE_WIRE_BUS);
-  
-  int value = ds.read(0);
-  if(value == DS_DISCONNECTED) {
+  if(ds18b20.available() == false) {
+    // Leave if the sesors measurement isn't ready
+    return true;
+  }
+  // read computer sensor
+  float value = ds18b20.readTemperature(FA(ds18b20Address[0]));
+  if(value == TEMP_ERROR) {
     #ifdef DEBUG_DS18B20
-      printf_P(PSTR("DS18B20: Error: Computer sensor communication failed!\n\r"));
+      printf_P(PSTR("DS18B20: Error: Computer sensor failed!\n\r"));
     #endif
     return false;
   }
@@ -229,11 +250,11 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Info: Computer temperature: %dC.\n\r"), value);
   #endif
   states[COMPUTER_TEMP] = value;
-
-  value = ds.read(1);
-  if(value == DS_DISCONNECTED) {
+  // read substrate sensor
+  value = ds18b20.readTemperature(FA(ds18b20Address[1]));
+  if(value == TEMP_ERROR) {
     #ifdef DEBUG_DS18B20
-      printf_P(PSTR("DS18B20: Error: Substrate sensor communication failed!\n\r"));
+      printf_P(PSTR("DS18B20: Error: Substrate sensor failed!\n\r"));
     #endif
     return false;
   }
@@ -241,7 +262,8 @@ bool read_DS18B20() {
     printf_P(PSTR("DS18B20: Info: Substrate temperature: %dC.\n\r"), value);
   #endif
   states[SUBSTRATE_TEMP] = value;
-  return true;
+  // request all sensors for measurement
+  return ds18b20.request();
 }
 
 bool read_BH1750() {
