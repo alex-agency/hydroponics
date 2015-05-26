@@ -349,8 +349,8 @@ public:
             settings.silentMorning = 0; // hour
             settings.silentEvening = 24; // hour
 
-            settings.wateringDuration = 1; //min
-            settings.mistingDuration = 10; //sec
+            settings.wateringDuration = 4; //min
+            settings.mistingDuration = 8; //sec
           }
         }
         break;

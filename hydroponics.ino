@@ -122,8 +122,6 @@ void loop()
     // timer for 1 min
     if(timerSec - timerMin >= 60*MILLIS_TO_SEC) {
       timerMin = timerSec;
-      // system check
-      checkSystem();
       // manage light
       doLight();
       // manage misting and watering
@@ -168,10 +166,10 @@ void loop()
     // timer for 100 sec
     if(timerSec - timer100sec >= 100*MILLIS_TO_SEC) {
       timer100sec = timerSec;
-      // check sensors
-      checkSensors();
+      // system check
+      checkSystem();
       #ifdef DEBUG
-        printf_P(PSTR("Loop: Info: Check sensors take: %dms\n\r"),
+        printf_P(PSTR("Loop: Info: System check takes: %dms\n\r"),
           millis()-timerSec);
       #endif
     }
@@ -304,7 +302,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/MILLIS_TO_SEC > lastWatering + 30)
+    if(millis()/MILLIS_TO_SEC > lastWatering + 80)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -420,9 +418,6 @@ void checkSystem() {
     states[ERROR] = ERROR_CLOCK;
     return;  
   }
-}
-
-void checkSensors() {
   // read DHT sensor
   if(read_DHT() == false) {
     states[ERROR] = ERROR_DHT;
@@ -627,7 +622,7 @@ void watering() {
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED ||
       states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 20; // max officient pause
+    pauseDuration = 19; // max officient pause
   // pause every 30 sec
   if((millis()/MILLIS_TO_SEC-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
@@ -650,7 +645,7 @@ void watering() {
   }
   // start watering
   #ifdef DEBUG
-    printf_P(PSTR("Misting: Info: Watering...\n\r"));
+    printf_P(PSTR("Watering: Info: Watering...\n\r"));
   #endif
   if(states[WARNING] == NO_WARNING) {
     beep.play(ONE_BEEP);

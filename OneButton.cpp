@@ -22,7 +22,7 @@ OneButton::OneButton(int pin, int activeLow)
   pinMode(pin, INPUT);      // sets the MenuPin as input
   _pin = pin;
 
-  _clickTicks = 80;        // number of millisec that have to pass by before a click is detected.
+  _clickTicks = 50;        // number of millisec that have to pass by before a click is detected.
   _pressTicks = 800;       // number of millisec that have to pass by before a long button press is detected.
  
   _state = 0; // starting with state 0: waiting for button to be pressed
