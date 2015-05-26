@@ -396,7 +396,7 @@ void checkSystem() {
     return;
   }
   // prevent burn system
-  if(states[COMPUTER_TEMP] >= 40) {
+  if(states[COMPUTER_TEMP] >= 45) {
     #ifdef DEBUG
       printf_P(PSTR("SLEEP: Info: Go to long sleep.\n\r"));
     #endif
@@ -414,6 +414,11 @@ void checkSystem() {
   if(storage.ok == false) {
     states[ERROR] = ERROR_EEPROM;
     return;
+  }
+  // check clock
+  if(clock.year() < 2014 || clock.year() > 2024) {
+    states[ERROR] = ERROR_CLOCK;
+    return;  
   }
 }
 
@@ -458,9 +463,7 @@ void doWork() {
     return;
   }
   // sunny time
-  if(states[LIGHT] >= 2500 &&
-      settings.silentMorning <= clock.hour() && 
-      clock.hour() < settings.silentEvening) {
+  if( isSunny() ) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Sunny time.\n\r"));
     #endif
@@ -468,8 +471,7 @@ void doWork() {
     return;
   }
   // night time
-  if(settings.silentEvening <= clock.hour() || 
-      clock.hour() < settings.silentMorning) {
+  if( isNight() ) {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
@@ -478,6 +480,29 @@ void doWork() {
   }
   // other time period
   checkTimer(settings.wateringPeriod, settings.mistingPeriod);
+}
+
+bool isSunny() {
+  if(states[LIGHT] < 2500) {
+    return false;
+  }
+  if(states[ERROR] == ERROR_CLOCK) {
+    return true;
+  }
+  if(settings.silentMorning > clock.hour()) {
+    return false;
+  }
+  return clock.hour() < settings.silentEvening;
+}
+
+bool isNight() {
+  if(states[ERROR] == ERROR_CLOCK && states[LIGHT] < 200) {
+    return true;
+  }
+  if(settings.silentEvening > clock.hour()) {
+    return false;
+  }
+  return clock.hour() < settings.silentMorning;
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {

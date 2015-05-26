@@ -97,6 +97,7 @@ static const uint8_t ERROR_DHT = 12;
 static const uint8_t ERROR_BH1750 = 13;
 static const uint8_t ERROR_DS18B20 = 14;
 static const uint8_t ERROR_NO_SUBSTRATE = 15;
+static const uint8_t ERROR_CLOCK = 16;
 // Define state map keys constants
 static const uint8_t HUMIDITY = 2; // air humidity
 static const uint8_t AIR_TEMP = 3;
@@ -155,9 +156,11 @@ public:
       show();
     }
     // update beep
-    if(settings.silentMorning <= clock.hour() && 
-      clock.hour() < settings.silentEvening)
-    beep.update();
+    if(states[ERROR] == ERROR_CLOCK || 
+        (settings.silentMorning <= clock.hour() && 
+          clock.hour() < settings.silentEvening)) {
+      beep.update();
+    }
   }
 
   void keepDefault() {
@@ -547,6 +550,9 @@ private:
         return;
       case ERROR_NO_SUBSTRATE:
         fprintf_P(&lcd_out, PSTR("No substrate!   \n{Plants can die!} "));
+        return;
+      case ERROR_CLOCK:
+        fprintf_P(&lcd_out, PSTR("Clock ERROR!    \n{Set up clock!}   "));
         return;
     }  
   }
