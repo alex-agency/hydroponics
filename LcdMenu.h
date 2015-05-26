@@ -516,7 +516,7 @@ private:
         return;
       case WARNING_NO_WATER:
         fprintf_P(&lcd_out, PSTR("Misting error!  \nNo water! {:(}    "));
-        //beep.play(ONE_BEEP);
+        beep.play(ONE_BEEP);
         return;                
       case WARNING_WATERING:
         fprintf_P(&lcd_out, PSTR("Watering...     \n{Please wait.}    "));

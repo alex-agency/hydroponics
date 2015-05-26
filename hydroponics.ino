@@ -304,7 +304,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/MILLIS_TO_SEC > lastWatering + 180)
+    if(millis()/MILLIS_TO_SEC > lastWatering + 30)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -584,6 +584,7 @@ void doLight() {
 }
 
 void misting() {
+  // quick check
   if(startMisting == 0 || states[WARNING] == WARNING_NO_WATER) {
     // stop misting
     if(states[PUMP_MISTING]) {
@@ -610,38 +611,23 @@ void misting() {
 }
 
 void watering() {
-  if(startWatering == 0 && 
-  	  states[PUMP_WATERING] == false) {
+  // quick check
+  if(startWatering == 0) {
     return;
   }
-  // time is over
-  if(startWatering + (settings.wateringDuration*60) <= millis()/MILLIS_TO_SEC || 
-      states[ERROR] == ERROR_NO_SUBSTRATE) {
-    // stop watering
-    if(states[WARNING] == INFO_SUBSTRATE_DELIVERED) {
-      #ifdef DEBUG
-        printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
-      #endif
-      relayOff(PUMP_WATERING);
-      startWatering = 0;
-      if(states[WARNING] == WARNING_WATERING)
-        states[WARNING] = NO_WARNING;
-      return;
-    }
-    // emergency stop
-    relayOff(PUMP_WATERING);
-    states[WARNING] = WARNING_SUBSTRATE_LOW;
-    startWatering = 0;
+  // emergency stop
+  if(states[ERROR] == ERROR_NO_SUBSTRATE) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Error: Emergency stop watering.\n\r"));
     #endif
-    return;
+    relayOff(PUMP_WATERING);
+    return;    
   }
-  // set pause for cleanup pump and rest
+  // pause for cleanup pump and rest
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED ||
       states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 19; // max officient pause
+    pauseDuration = 20; // max officient pause
   // pause every 30 sec
   if((millis()/MILLIS_TO_SEC-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
@@ -650,6 +636,19 @@ void watering() {
     relayOff(PUMP_WATERING);
     return;
   }
+  // time is over
+  if(startWatering + (settings.wateringDuration*60) <= millis()/MILLIS_TO_SEC) {
+    #ifdef DEBUG
+      printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
+    #endif
+    relayOff(PUMP_WATERING);
+    startWatering = 0;
+    if(states[WARNING] == WARNING_WATERING) {
+      states[WARNING] = NO_WARNING;  
+    }
+    return;
+  }
+  // start watering
   #ifdef DEBUG
     printf_P(PSTR("Misting: Info: Watering...\n\r"));
   #endif
