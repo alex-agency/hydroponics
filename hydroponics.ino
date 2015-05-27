@@ -484,20 +484,16 @@ bool isSunny() {
   if(states[ERROR] == ERROR_CLOCK) {
     return true;
   }
-  if(settings.silentMorning > clock.hour()) {
-    return false;
-  }
-  return clock.hour() < settings.silentEvening;
+  return settings.silentMorning <= clock.hour() &&
+    clock.hour() < settings.silentEvening;
 }
 
 bool isNight() {
   if(states[ERROR] == ERROR_CLOCK && states[LIGHT] < 200) {
     return true;
   }
-  if(settings.silentEvening > clock.hour()) {
-    return false;
-  }
-  return clock.hour() < settings.silentMorning;
+  return settings.silentEvening <= clock.hour() && 
+    clock.hour() < settings.silentMorning;
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
@@ -621,9 +617,9 @@ void watering() {
   // pause for cleanup pump and rest
   uint8_t pauseDuration = 5;
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
-    pauseDuration = 19; // max officient pause
+    pauseDuration = 15;
   if(states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 22;
+    pauseDuration = 22; // max officient pause
   // pause every 30 sec
   if((millis()/MILLIS_TO_SEC-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG

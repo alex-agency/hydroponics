@@ -64,14 +64,12 @@ static const uint8_t MISTING = 6;
 static const uint8_t LIGHT_MINIMUM = 7;
 static const uint8_t LIGHT_DAY_DURATION = 8;
 static const uint8_t LIGHT_DAY_START = 9;
-static const uint8_t HUMIDITY_MINIMUM = 10;
-static const uint8_t HUMIDITY_MAXIMUM = 11;
-static const uint8_t AIR_TEMP_MINIMUM = 12;
-static const uint8_t AIR_TEMP_MAXIMUM = 13;
-static const uint8_t SUBSTRATE_TEMP_MINIMUM = 14;
-static const uint8_t SILENT_NIGHT = 15;
-static const uint8_t TEST = 16;
-static const uint8_t CLOCK = 17;
+static const uint8_t HUMIDITY_RANGE = 10;
+static const uint8_t AIR_TEMP_RANGE = 11;
+static const uint8_t SUBSTRATE_TEMP_MINIMUM = 12;
+static const uint8_t SILENT_NIGHT = 13;
+static const uint8_t TEST = 14;
+static const uint8_t CLOCK = 15;
 // Define clock settings items
 static const uint8_t YEAR_SETTING = 3;
 static const uint8_t MONTH_SETTING = 4;
@@ -241,38 +239,47 @@ public:
     // print menu
     lcd.home();
     switch (menuItem) {
+
       case WATERING_DURATION:
         fprintf_P(&lcd_out, PSTR("Watering durat. \nfor {%2d} min      "), 
           settings.wateringDuration += nextItem);
         break;
+
       case WATERING_SUNNY:
         menuPeriod(PSTR("Watering sunny  \n"), 
           (settings.wateringSunnyPeriod += nextItem));
         break;
+
       case WATERING:
         menuPeriod(PSTR("Watering period \n"), 
           (settings.wateringPeriod += nextItem));
         break;
+
       case MISTING_DURATION:
         fprintf_P(&lcd_out, PSTR("Misting duration\nfor {%2d} sec      "), 
           settings.mistingDuration += nextItem);
         break;
+
       case MISTING_SUNNY:
         menuPeriod(PSTR("Misting sunny   \n"),
           (settings.mistingSunnyPeriod += nextItem));
         break;
+
       case MISTING:
         menuPeriod(PSTR("Misting period  \n"), 
           (settings.mistingPeriod += nextItem));
         break;
+
       case LIGHT_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Light not less  \nthan {%4d} lux   "), 
           settings.lightMinimum += nextItem);
         break;
+
       case LIGHT_DAY_DURATION:
         fprintf_P(&lcd_out, PSTR("Light day       \nduration {%2d}h    "), 
           settings.lightDayDuration += nextItem);
         break;
+
       case LIGHT_DAY_START:
         fprintf_P(&lcd_out, PSTR("Light day from  \n"));
         if(editMode == false) {
@@ -285,29 +292,51 @@ public:
             (settings.lightDayStart += (nextItem*SEC_TO_MIN))/SEC_TO_MIN);
         }
         break;
-      case HUMIDITY_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Humidity not    \nless than {%2d}%%   "), 
-          settings.humidMinimum += nextItem);
+
+      case HUMIDITY_RANGE:
+        fprintf_P(&lcd_out, PSTR("Humidity range  \n"));
+        uint8_t blinkFrom, blinkTo;
+        if(editMode == true || editMode == 4) {
+          editMode = 4;
+          blinkFrom = 5;
+          blinkTo = 6;
+          settings.humidMinimum += nextItem;
+        } else {
+          blinkFrom = 12;
+          blinkTo = 13;
+          settings.humidMaximum += nextItem;
+        }
+        fprintf_P(&lcd_out, PSTR("from %2d%% to %2d}%% "), 
+          settings.humidMinimum, settings.humidMaximum);
+        if(editMode != false)
+          textBlinkPos(1, blinkFrom, blinkTo);
         break;
-      case HUMIDITY_MAXIMUM:
-        fprintf_P(&lcd_out, PSTR("Humidity not    \ngreater than {%2d}%%"), 
-          settings.humidMaximum += nextItem);
-        break;
-      case AIR_TEMP_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Air temper. not \nless than {%2d}%c   "), 
-          settings.airTempMinimum += nextItem, C_CELCIUM);
-        break;
-      case AIR_TEMP_MAXIMUM:
-        fprintf_P(&lcd_out, PSTR("Air temper. not \ngreater than {%2d}%c"), 
-          settings.airTempMaximum += nextItem, C_CELCIUM);
-        break;
+
+      case AIR_TEMP_RANGE:
+        fprintf_P(&lcd_out, PSTR("Air temp. range \n"));
+        if(editMode == true || editMode == 4) {
+          editMode = 4;
+          blinkFrom = 5;
+          blinkTo = 6;
+          settings.airTempMinimum += nextItem;
+        } else {
+          blinkFrom = 12;
+          blinkTo = 13;
+          settings.airTempMaximum += nextItem;
+        }
+        fprintf_P(&lcd_out, PSTR("from %2d%c to %2d}%c "), 
+          settings.airTempMinimum, C_CELCIUM, settings.airTempMaximum, C_CELCIUM);
+        if(editMode != false)
+          textBlinkPos(1, blinkFrom, blinkTo);
+        break; 
+
       case SUBSTRATE_TEMP_MINIMUM:
         fprintf_P(&lcd_out, PSTR("Substrate not   \nless than {%2d}%c   "), 
           settings.subsTempMinimum += nextItem, C_CELCIUM);
         break;
+
       case SILENT_NIGHT:
         fprintf_P(&lcd_out, PSTR("Silent night    \n"));
-        uint8_t blinkFrom, blinkTo;
         if(editMode == true || editMode == 4) {
           editMode = 4;
           blinkFrom = 5;
@@ -323,6 +352,7 @@ public:
         if(editMode != false)
           textBlinkPos(1, blinkFrom, blinkTo);
         break;
+
       case TEST:
         textBlink = true;
         if(editMode == false) {
@@ -354,11 +384,13 @@ public:
           }
         }
         break;
+
       case 255: 
         menuItem = CLOCK;
       case CLOCK:
         clockScreen();
         break;
+
       default:
         menuItem = HOME;
         break;
