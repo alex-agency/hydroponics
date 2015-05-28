@@ -492,7 +492,7 @@ bool isNight() {
   if(states[ERROR] == ERROR_CLOCK && states[LIGHT] < 200) {
     return true;
   }
-  return settings.silentEvening <= clock.hour() && 
+  return settings.silentEvening <= clock.hour() || 
     clock.hour() < settings.silentMorning;
 }
 

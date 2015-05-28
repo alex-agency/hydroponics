@@ -56,20 +56,17 @@ static const uint8_t C_LAMP = 5;
 // Define LCD menu items
 static const uint8_t HOME = 0;
 static const uint8_t WATERING_DURATION = 1;
-static const uint8_t WATERING_SUNNY = 2;
-static const uint8_t WATERING = 3;
-static const uint8_t MISTING_DURATION = 4;
-static const uint8_t MISTING_SUNNY = 5;
-static const uint8_t MISTING = 6;
-static const uint8_t LIGHT_MINIMUM = 7;
-static const uint8_t LIGHT_DAY_DURATION = 8;
-static const uint8_t LIGHT_DAY_START = 9;
-static const uint8_t HUMIDITY_RANGE = 10;
-static const uint8_t AIR_TEMP_RANGE = 11;
-static const uint8_t SUBSTRATE_TEMP_MINIMUM = 12;
-static const uint8_t SILENT_NIGHT = 13;
-static const uint8_t TEST = 14;
-static const uint8_t CLOCK = 15;
+static const uint8_t WATERING_PERIOD = 2;
+static const uint8_t MISTING_DURATION = 3;
+static const uint8_t MISTING_PERIOD = 4;
+static const uint8_t LIGHT_DURATION = 5;
+static const uint8_t LIGHT_DAY_START = 6;
+static const uint8_t HUMIDITY_RANGE = 7;
+static const uint8_t AIR_TEMP_RANGE = 8;
+static const uint8_t SUBSTRATE_TEMP_MINIMUM = 9;
+static const uint8_t SILENT_NIGHT = 10;
+static const uint8_t TEST = 11;
+static const uint8_t CLOCK = 12;
 // Define clock settings items
 static const uint8_t YEAR_SETTING = 3;
 static const uint8_t MONTH_SETTING = 4;
@@ -245,14 +242,35 @@ public:
           settings.wateringDuration += nextItem);
         break;
 
-      case WATERING_SUNNY:
-        menuPeriod(PSTR("Watering sunny  \n"), 
-          (settings.wateringSunnyPeriod += nextItem));
-        break;
-
-      case WATERING:
-        menuPeriod(PSTR("Watering period \n"), 
-          (settings.wateringPeriod += nextItem));
+      case WATERING_PERIOD:
+        fprintf_P(&lcd_out, PSTR("Watering period \n"));
+        if(settings.wateringSunnyPeriod > 0 && settings.wateringPeriod > 0 
+          || editMode != false) 
+        {
+            uint8_t blinkFrom, blinkTo;
+            if(editMode == true || editMode == 4) {
+              editMode = 4;
+              blinkFrom = 4;
+              blinkTo = 6;
+              settings.wateringSunnyPeriod += nextItem;
+            } else {
+              blinkFrom = 8;
+              blinkTo = 10;
+              settings.wateringPeriod += nextItem;
+            }
+            fprintf_P(&lcd_out, PSTR("sun %3d/%3d} min "), 
+              settings.wateringSunnyPeriod, settings.wateringPeriod);
+            if(editMode != false)
+              textBlinkPos(1, blinkFrom, blinkTo);
+        } 
+        else if(settings.wateringSunnyPeriod == 0) {
+          fprintf_P(&lcd_out, PSTR("sun ---/{%3d} min "), 
+            settings.wateringPeriod += nextItem); 
+        } 
+        else if(settings.wateringPeriod == 0) {
+          fprintf_P(&lcd_out, PSTR("sun {%3d}/--- min "), 
+            settings.wateringSunnyPeriod += nextItem); 
+        }
         break;
 
       case MISTING_DURATION:
@@ -260,24 +278,54 @@ public:
           settings.mistingDuration += nextItem);
         break;
 
-      case MISTING_SUNNY:
-        menuPeriod(PSTR("Misting sunny   \n"),
-          (settings.mistingSunnyPeriod += nextItem));
+      case MISTING_PERIOD:
+        fprintf_P(&lcd_out, PSTR("Misting period  \n"));
+        if(settings.mistingSunnyPeriod > 0 && settings.mistingPeriod > 0 
+          || editMode != false) 
+        {
+            uint8_t blinkFrom, blinkTo;
+            if(editMode == true || editMode == 4) {
+              editMode = 4;
+              blinkFrom = 4;
+              blinkTo = 6;
+              settings.mistingSunnyPeriod += nextItem;
+            } else {
+              blinkFrom = 8;
+              blinkTo = 10;
+              settings.mistingPeriod += nextItem;
+            }
+            fprintf_P(&lcd_out, PSTR("sun %3d/%3d} min "), 
+              settings.mistingSunnyPeriod, settings.mistingPeriod);
+            if(editMode != false)
+              textBlinkPos(1, blinkFrom, blinkTo);
+        } 
+        else if(settings.mistingSunnyPeriod == 0) {
+          fprintf_P(&lcd_out, PSTR("sun ---/{%3d} min "), 
+            settings.mistingPeriod += nextItem); 
+        } 
+        else if(settings.mistingPeriod == 0) {
+          fprintf_P(&lcd_out, PSTR("sun {%3d}/--- min "), 
+            settings.mistingSunnyPeriod += nextItem); 
+        }
         break;
 
-      case MISTING:
-        menuPeriod(PSTR("Misting period  \n"), 
-          (settings.mistingPeriod += nextItem));
-        break;
-
-      case LIGHT_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Light not less  \nthan {%4d} lux   "), 
-          settings.lightMinimum += nextItem);
-        break;
-
-      case LIGHT_DAY_DURATION:
-        fprintf_P(&lcd_out, PSTR("Light day       \nduration {%2d}h    "), 
-          settings.lightDayDuration += nextItem);
+      case LIGHT_DURATION:
+        fprintf_P(&lcd_out, PSTR("Light day       \n"));
+        uint8_t blinkFrom, blinkTo;
+        if(editMode == true || editMode == 4) {
+          editMode = 4;
+          blinkFrom = 0;
+          blinkTo = 1;
+          settings.lightDayDuration += nextItem;
+        } else {
+          blinkFrom = 9;
+          blinkTo = 12;
+          settings.lightMinimum += nextItem;
+        }
+        fprintf_P(&lcd_out, PSTR("%2dh with %4d}lux"), 
+          settings.lightDayDuration, settings.lightMinimum);
+        if(editMode != false)
+          textBlinkPos(1, blinkFrom, blinkTo);
         break;
 
       case LIGHT_DAY_START:
@@ -295,7 +343,6 @@ public:
 
       case HUMIDITY_RANGE:
         fprintf_P(&lcd_out, PSTR("Humidity range  \n"));
-        uint8_t blinkFrom, blinkTo;
         if(editMode == true || editMode == 4) {
           editMode = 4;
           blinkFrom = 5;
@@ -331,7 +378,7 @@ public:
         break; 
 
       case SUBSTRATE_TEMP_MINIMUM:
-        fprintf_P(&lcd_out, PSTR("Substrate not   \nless than {%2d}%c   "), 
+        fprintf_P(&lcd_out, PSTR("Substrate temp. \nminimum {%2d}%c     "), 
           settings.subsTempMinimum += nextItem, C_CELCIUM);
         break;
 
@@ -508,15 +555,6 @@ private:
     }
     textBlinkPos(1, blinkFrom, blinkTo);
     clock = DateTime(year, month, day, hour, minute);
-  }
-
-  void menuPeriod(const char * __fmt, uint8_t _period) {
-    fprintf_P(&lcd_out, __fmt);
-    if(_period > 0 || editMode != false) {
-      fprintf_P(&lcd_out, PSTR("every {%3d} min   "), _period); 
-    } else {
-      fprintf_P(&lcd_out, PSTR("is disable      ")); 
-    }
   }
 
   void showWarning() {
