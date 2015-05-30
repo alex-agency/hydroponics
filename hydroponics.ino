@@ -302,7 +302,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/MILLIS_TO_SEC > lastWatering + 70)
+    if(millis()/MILLIS_TO_SEC > lastWatering + 65)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -619,7 +619,7 @@ void watering() {
   if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 15;
   if(states[WARNING] == WARNING_SUBSTRATE_LOW)
-    pauseDuration = 22; // max officient pause
+    pauseDuration = 21; // max officient pause
   // pause every 30 sec
   if((millis()/MILLIS_TO_SEC-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG

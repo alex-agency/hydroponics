@@ -12,18 +12,24 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 // Declare lcd output
 FILE lcd_out = {0};
 static bool charErase, textErase, textBlink;
+static uint8_t blinkCursor, blinkPos;
 static int lcd_putchar(char c, FILE *) {
   switch(c) {
     case '\n':
       lcd.setCursor(0,1);
+      blinkCursor = 0;
       break;
     case '{':
-      if(textBlink && textErase)
+      blinkCursor++;
+      if(textBlink && textErase && 
+          (blinkPos == false || blinkPos == blinkCursor))
         charErase = true;
       break;
     case '}':
-      charErase = false;
-      textErase = !textErase;
+      if(blinkPos == false || blinkPos == blinkCursor) {
+        charErase = false;
+        textErase = !textErase;
+      }
       break;
     default:
       if(charErase)
@@ -67,12 +73,6 @@ static const uint8_t SUBSTRATE_TEMP_MINIMUM = 9;
 static const uint8_t SILENT_NIGHT = 10;
 static const uint8_t TEST = 11;
 static const uint8_t CLOCK = 12;
-// Define clock settings items
-static const uint8_t YEAR_SETTING = 3;
-static const uint8_t MONTH_SETTING = 4;
-static const uint8_t DAY_SETTING = 5;
-static const uint8_t MINUTE_SETTING = 6;
-static const uint8_t HOUR_SETTING = 7;
 // Define warning states
 static const uint8_t NO_WARNING = 0;
 static const uint8_t INFO_SUBSTRATE_FULL = 1;
@@ -197,6 +197,7 @@ public:
       // don't change settings
       nextItem = false;
       textBlink = false;
+      blinkPos = false;
       editMode = false;
     }
     if(menuItem != HOME || 
@@ -244,32 +245,28 @@ public:
 
       case WATERING_PERIOD:
         fprintf_P(&lcd_out, PSTR("Watering period \n"));
-        if(settings.wateringSunnyPeriod > 0 && settings.wateringPeriod > 0 
-          || editMode != false) 
-        {
-            uint8_t blinkFrom, blinkTo;
-            if(editMode == true || editMode == 4) {
-              editMode = 4;
-              blinkFrom = 4;
-              blinkTo = 6;
-              settings.wateringSunnyPeriod += nextItem;
-            } else {
-              blinkFrom = 8;
-              blinkTo = 10;
-              settings.wateringPeriod += nextItem;
-            }
-            fprintf_P(&lcd_out, PSTR("sun %3d/%3d} min "), 
-              settings.wateringSunnyPeriod, settings.wateringPeriod);
-            if(editMode != false)
-              textBlinkPos(1, blinkFrom, blinkTo);
-        } 
-        else if(settings.wateringSunnyPeriod == 0) {
+        if(settings.wateringSunnyPeriod == 0) {
           fprintf_P(&lcd_out, PSTR("sun ---/{%3d} min "), 
             settings.wateringPeriod += nextItem); 
         } 
         else if(settings.wateringPeriod == 0) {
           fprintf_P(&lcd_out, PSTR("sun {%3d}/--- min "), 
             settings.wateringSunnyPeriod += nextItem); 
+        } else {
+            switch (editMode) {
+              case true:
+                editMode = 4;
+              case 4:
+                blinkPos = 1;
+                settings.wateringSunnyPeriod += nextItem;
+                break;
+              case 3:
+                blinkPos = 2;
+                settings.wateringPeriod += nextItem;
+                break;
+            }  
+            fprintf_P(&lcd_out, PSTR("sun {%3d}/{%3d} min "), 
+              settings.wateringSunnyPeriod, settings.wateringPeriod);
         }
         break;
 
@@ -280,52 +277,46 @@ public:
 
       case MISTING_PERIOD:
         fprintf_P(&lcd_out, PSTR("Misting period  \n"));
-        if(settings.mistingSunnyPeriod > 0 && settings.mistingPeriod > 0 
-          || editMode != false) 
-        {
-            uint8_t blinkFrom, blinkTo;
-            if(editMode == true || editMode == 4) {
-              editMode = 4;
-              blinkFrom = 4;
-              blinkTo = 6;
-              settings.mistingSunnyPeriod += nextItem;
-            } else {
-              blinkFrom = 8;
-              blinkTo = 10;
-              settings.mistingPeriod += nextItem;
-            }
-            fprintf_P(&lcd_out, PSTR("sun %3d/%3d} min "), 
-              settings.mistingSunnyPeriod, settings.mistingPeriod);
-            if(editMode != false)
-              textBlinkPos(1, blinkFrom, blinkTo);
-        } 
-        else if(settings.mistingSunnyPeriod == 0) {
+        if(settings.mistingSunnyPeriod == 0) {
           fprintf_P(&lcd_out, PSTR("sun ---/{%3d} min "), 
             settings.mistingPeriod += nextItem); 
         } 
         else if(settings.mistingPeriod == 0) {
           fprintf_P(&lcd_out, PSTR("sun {%3d}/--- min "), 
             settings.mistingSunnyPeriod += nextItem); 
+        } else {
+            switch (editMode) {
+              case true:
+                editMode = 4;
+              case 4:
+                blinkPos = 1;
+                settings.mistingSunnyPeriod += nextItem;
+                break;
+              case 3:
+                blinkPos = 2;
+                settings.mistingPeriod += nextItem;
+                break;
+            } 
+            fprintf_P(&lcd_out, PSTR("sun {%3d}/{%3d} min "), 
+              settings.mistingSunnyPeriod, settings.mistingPeriod);          
         }
         break;
 
       case LIGHT_DURATION:
-        fprintf_P(&lcd_out, PSTR("Light day       \n"));
-        uint8_t blinkFrom, blinkTo;
-        if(editMode == true || editMode == 4) {
-          editMode = 4;
-          blinkFrom = 0;
-          blinkTo = 1;
-          settings.lightDayDuration += nextItem;
-        } else {
-          blinkFrom = 9;
-          blinkTo = 12;
-          settings.lightMinimum += nextItem;
-        }
-        fprintf_P(&lcd_out, PSTR("%2dh with %4d}lux"), 
+        switch (editMode) {
+          case true:
+            editMode = 4;
+          case 4:
+            blinkPos = 1;
+            settings.lightDayDuration += nextItem;
+            break;
+          case 3:
+            blinkPos = 2;
+            settings.lightMinimum += nextItem;
+            break;
+        }    
+        fprintf_P(&lcd_out, PSTR("Light day       \n{%2d}h with {%4d}lux"),
           settings.lightDayDuration, settings.lightMinimum);
-        if(editMode != false)
-          textBlinkPos(1, blinkFrom, blinkTo);
         break;
 
       case LIGHT_DAY_START:
@@ -342,39 +333,37 @@ public:
         break;
 
       case HUMIDITY_RANGE:
-        fprintf_P(&lcd_out, PSTR("Humidity range  \n"));
-        if(editMode == true || editMode == 4) {
-          editMode = 4;
-          blinkFrom = 5;
-          blinkTo = 6;
-          settings.humidMinimum += nextItem;
-        } else {
-          blinkFrom = 12;
-          blinkTo = 13;
-          settings.humidMaximum += nextItem;
-        }
-        fprintf_P(&lcd_out, PSTR("from %2d%% to %2d}%% "), 
+        switch (editMode) {
+          case true:
+            editMode = 4;
+          case 4:
+            blinkPos = 1;
+            settings.humidMinimum += nextItem;
+            break;
+          case 3:
+            blinkPos = 2;
+            settings.humidMaximum += nextItem;
+            break;
+        }   
+        fprintf_P(&lcd_out, PSTR("Humidity range  \nfrom {%2d}%% to {%2d}%% "),
           settings.humidMinimum, settings.humidMaximum);
-        if(editMode != false)
-          textBlinkPos(1, blinkFrom, blinkTo);
         break;
 
       case AIR_TEMP_RANGE:
-        fprintf_P(&lcd_out, PSTR("Air temp. range \n"));
-        if(editMode == true || editMode == 4) {
-          editMode = 4;
-          blinkFrom = 5;
-          blinkTo = 6;
-          settings.airTempMinimum += nextItem;
-        } else {
-          blinkFrom = 12;
-          blinkTo = 13;
-          settings.airTempMaximum += nextItem;
+        switch (editMode) {
+          case true:
+            editMode = 4;
+          case 4:
+            blinkPos = 1;
+            settings.airTempMinimum += nextItem;
+            break;
+          case 3:
+            blinkPos = 2;
+            settings.airTempMaximum += nextItem;
+            break;
         }
-        fprintf_P(&lcd_out, PSTR("from %2d%c to %2d}%c "), 
+        fprintf_P(&lcd_out, PSTR("Air temp. range \nfrom {%2d}%c to {%2d}%c "), 
           settings.airTempMinimum, C_CELCIUM, settings.airTempMaximum, C_CELCIUM);
-        if(editMode != false)
-          textBlinkPos(1, blinkFrom, blinkTo);
         break; 
 
       case SUBSTRATE_TEMP_MINIMUM:
@@ -383,21 +372,20 @@ public:
         break;
 
       case SILENT_NIGHT:
-        fprintf_P(&lcd_out, PSTR("Silent night    \n"));
-        if(editMode == true || editMode == 4) {
-          editMode = 4;
-          blinkFrom = 5;
-          blinkTo = 6;
-          settings.silentEvening += nextItem;
-        } else {
-          blinkFrom = 12;
-          blinkTo = 13;
-          settings.silentMorning += nextItem;
+        switch (editMode) {
+          case true:
+            editMode = 4;
+          case 4:
+            blinkPos = 1;
+            settings.silentEvening += nextItem;
+            break;
+          case 3:
+            blinkPos = 2;
+            settings.silentMorning += nextItem;
+            break;
         }
-        fprintf_P(&lcd_out, PSTR("from %2dh to %2d}h "),
+        fprintf_P(&lcd_out, PSTR("Silent night    \nfrom {%2d}h to {%2d}h "),
           settings.silentEvening, settings.silentMorning);
-        if(editMode != false)
-          textBlinkPos(1, blinkFrom, blinkTo);
         break;
 
       case TEST:
@@ -450,13 +438,6 @@ private:
   unsigned long lastUpdate;
   uint8_t homeScreenItem;
 
-  void textBlinkPos(uint8_t _row, uint8_t _start, uint8_t _end) {
-    while(textErase && _start <= _end) {
-      lcd.setCursor(_start, _row); fprintf_P(&lcd_out, PSTR(" "));
-      _start++;
-    }
-  }
-
   void backlightBlink(uint8_t _count) {
     for(uint8_t i=0; i<_count; i++) {
       lcd.setBacklight(false); delay(250);
@@ -467,9 +448,6 @@ private:
   void homeScreen() {
     textBlink = true;
     lcd.home();
-    //fprintf_P(&lcd_out, PSTR("%c%c%c%c%c%c%c    %02d{:}%02d\n"), 
-    //  C_FLOWER, C_FLOWER, C_FLOWER, C_FLOWER, C_HEART, 
-    //  C_FLOWER, C_HEART, clock.hour(), clock.minute());
     fprintf_P(&lcd_out, PSTR("           %02d{:}%02d\n"), 
       clock.hour(), clock.minute());
 
@@ -510,50 +488,43 @@ private:
       return;
     }
     // edit mode
-    fprintf_P(&lcd_out, PSTR("Setting time    \n%02d:%02d %02d-%02d-%4d}"), 
-      hour, minute, day, month, year);
-    storage.changed = false;
-    uint8_t blinkFrom, blinkTo;
+    storage.changed = false; // don't save EEPROM
     switch (editMode) {
       case true:
-        editMode = HOUR_SETTING;
-      case HOUR_SETTING:
+        editMode = 7;
+      case 7:
+        blinkPos = 1;
         hour += nextItem;
         if(hour > 23)
           hour = 0;
-        blinkFrom = 0;
-        blinkTo = 1;
         break;
-      case MINUTE_SETTING:
+      case 6:
+        blinkPos = 2;
         minute += nextItem;
         if(minute > 59)
           minute = 0;
-        blinkFrom = 3;
-        blinkTo = 4;
         break;
-      case DAY_SETTING:
+      case 5:
+        blinkPos = 3;
         day += nextItem;
         if(day < 1 || day > 31)
           day = 1;
-        blinkFrom = 6;
-        blinkTo = 7;
         break;
-      case MONTH_SETTING:
+      case 4:
+        blinkPos = 4;
         month += nextItem;
         if(month < 1 || month > 12)
-          month = 1;  
-        blinkFrom = 9;
-        blinkTo = 10;
+          month = 1;
         break;
-      case YEAR_SETTING:
+      case 3:
+        blinkPos = 5;
         year += nextItem;
         if(year < 2014 || year > 2024)
-          year = 2014;
-        blinkFrom = 12;
-        blinkTo = 15;
+          year = 2014; 
         break;
     }
-    textBlinkPos(1, blinkFrom, blinkTo);
+    fprintf_P(&lcd_out, PSTR("Setting time    \n{%02d}:{%02d} {%02d}-{%02d}-{%4d}"), 
+      hour, minute, day, month, year);
     clock = DateTime(year, month, day, hour, minute);
   }
 
