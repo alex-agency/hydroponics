@@ -497,20 +497,20 @@ bool isNight() {
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
-  if(_wateringMinute != 0 && 
-      millis()/ONE_SEC > lastWatering + (_wateringMinute * 60)) {
-    startWatering = millis()/ONE_SEC;
-  }
   uint8_t secPerMin = 60;
+  unsigned long nextWatering = 
+    millis()/ONE_SEC-lastWatering - _wateringMinute * secPerMin;
   // check humidity
   if(states[HUMIDITY] <= settings.humidMinimum) {
     secPerMin /= 2; // twice often, one minute = 30 sec
   } else if(states[HUMIDITY] >= settings.humidMaximum) {
     secPerMin *= 2; // twice rarely, on minute = 120 sec
   }
-  if(_mistingMinute != 0 && 
-      millis()/ONE_SEC > lastMisting + (_mistingMinute * secPerMin)) {
-    startMisting = settings.mistingDuration;
+  unsigned long nextMisting = 
+    millis()/ONE_SEC - lastMisting - _mistingMinute * secPerMin;
+
+  if(_wateringMinute != 0 && nextWatering == 0) {
+    startWatering = millis()/ONE_SEC;
     // update sensors history
     states[PREV_AIR_TEMP] = states[AIR_TEMP];
     states[PREV_HUMIDITY] = states[HUMIDITY];
@@ -518,6 +518,13 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
     states[PREV_LIGHT] = states[LIGHT];
     states[PREV_COMPUTER_TEMP] = states[COMPUTER_TEMP];
   }
+
+  if(_mistingMinute != 0 && nextMisting == 0) {
+    startMisting = settings.mistingDuration;
+  }
+  
+  states[WATERING] = nextWatering * 60;
+  states[MISTING] = nextMisting * 60;
 }
 
 void doLight() { 

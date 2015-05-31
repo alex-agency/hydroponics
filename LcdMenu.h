@@ -50,7 +50,7 @@ RTC_DS1307 rtc;
 DateTime clock;
 
 // Declare state map
-SimpleMap<uint8_t, uint16_t, 15> states;
+SimpleMap<uint8_t, uint16_t, 17> states;
 
 // Define custom LCD characters
 static const uint8_t C_CELCIUM = 0;
@@ -111,6 +111,8 @@ static const uint8_t PREV_AIR_TEMP = 12;
 static const uint8_t PREV_COMPUTER_TEMP = 13;
 static const uint8_t PREV_SUBSTRATE_TEMP = 14;
 static const uint8_t PREV_LIGHT = 15;
+static const uint8_t WATERING = 16;
+static const uint8_t MISTING = 17;
 // Define constants
 static const uint8_t ENHANCED_MODE = 2; // edit mode
 static const uint16_t TEST_ENABLE = 20000;
@@ -136,10 +138,10 @@ public:
     lcd.begin();
     // load custom characters
     lcd.createChar(C_CELCIUM, settings.c_celcium);
-    //lcd.createChar(C_HEART, settings.c_heart);
+    lcd.createChar(C_HEART, settings.c_heart);
     lcd.createChar(C_HUMIDITY, settings.c_humidity);
     lcd.createChar(C_TEMP, settings.c_temp);
-    //lcd.createChar(C_FLOWER, settings.c_flower);
+    lcd.createChar(C_FLOWER, settings.c_flower);
     lcd.createChar(C_LAMP, settings.c_lamp);
     lcd.createChar(C_UP, settings.c_up);
     lcd.createChar(C_DOWN, settings.c_down);
@@ -457,54 +459,68 @@ private:
   void homeScreen() {
     textBlink = true;
     lcd.home();
-    fprintf_P(&lcd_out, PSTR("           %02d{:}%02d\n"), 
-      clock.hour(), clock.minute());
 
-    uint8_t c1, c2;
+    if(states[MISTING] != 0 && states[MISTING] < states[WATERING]) {
+      fprintf_P(&lcd_out, PSTR("%c %03d min "), C_FLOWER, states[MISTING]);
+    } 
+    else if(states[WATERING] != 0 && states[WATERING] < states[MISTING]) {
+      fprintf_P(&lcd_out, PSTR("%c %03d min "), C_HEART, states[WATERING]);
+    } 
+    else {
+      fprintf_P(&lcd_out, PSTR("Sleeping  "));
+    }
+    fprintf_P(&lcd_out, PSTR(" %02d{:}%02d\n"), clock.hour(), clock.minute());
+
     if(homeScreenItem >= 16)
       homeScreenItem = 0;
     switch (homeScreenItem) {
       case 0:
-        c1 = C_TEMP;
-        c2 = C_HUMIDITY;
+        fprintf_P(&lcd_out, PSTR("Air: "));
         if(states[AIR_TEMP] > states[PREV_AIR_TEMP])
-          c1 = C_UP;
+          fprintf_P(&lcd_out, PSTR("%c "), C_UP);
         else if(states[AIR_TEMP] < states[PREV_AIR_TEMP])
-          c1 = C_DOWN;
+          fprintf_P(&lcd_out, PSTR("%c "), C_DOWN);
+        else
+          fprintf_P(&lcd_out, PSTR("%c "), C_TEMP);
+        fprintf_P(&lcd_out, PSTR("%2d%c "), states[AIR_TEMP], C_CELCIUM);
+
         if(states[HUMIDITY] > states[PREV_HUMIDITY])
-          c2 = C_UP;
+          fprintf_P(&lcd_out, PSTR("%c "), C_UP);
         else if(states[HUMIDITY] < states[PREV_HUMIDITY])
-          c2 = C_DOWN;
-        fprintf_P(&lcd_out, PSTR("Air: %c %2d%c %c %2d%%"),
-          C_TEMP, states[AIR_TEMP], C_CELCIUM, 
-          C_HUMIDITY, states[HUMIDITY]);
+          fprintf_P(&lcd_out, PSTR("%c "), C_DOWN);
+        else
+          fprintf_P(&lcd_out, PSTR("%c "), C_HUMIDITY);
+        fprintf_P(&lcd_out, PSTR("%2d%%"), states[HUMIDITY]);
         break;
       case 4:
-        c1 = C_TEMP;
+        fprintf_P(&lcd_out, PSTR("Substrate: "));
         if(states[SUBSTRATE_TEMP] > states[PREV_SUBSTRATE_TEMP])
-          c1 = C_UP;
+          fprintf_P(&lcd_out, PSTR("%c "), C_UP);
         else if(states[SUBSTRATE_TEMP] < states[PREV_SUBSTRATE_TEMP])
-          c1 = C_DOWN;
-        fprintf_P(&lcd_out, PSTR("Substrate: %c %2d%c"),
-          C_TEMP, states[SUBSTRATE_TEMP], C_CELCIUM);
+          fprintf_P(&lcd_out, PSTR("%c "), C_DOWN);
+        else
+          fprintf_P(&lcd_out, PSTR("%c "), C_TEMP);
+        fprintf_P(&lcd_out, PSTR("%2d%c"), states[SUBSTRATE_TEMP], C_CELCIUM);
         break;
       case 8:
-        c1 = C_LAMP;
+        fprintf_P(&lcd_out, PSTR("Light: "));
         if(states[LIGHT] > states[PREV_LIGHT])
-          c1 = C_UP;
+          fprintf_P(&lcd_out, PSTR("%c "), C_UP);
         else if(states[LIGHT] < states[PREV_LIGHT])
-          c1 = C_DOWN;
-        fprintf_P(&lcd_out, PSTR("Light: %c %4dlux"),
-          C_LAMP, states[LIGHT]);
+          fprintf_P(&lcd_out, PSTR("%c "), C_DOWN);
+        else
+          fprintf_P(&lcd_out, PSTR("%c "), C_LAMP);
+        fprintf_P(&lcd_out, PSTR("%4dlux"), states[LIGHT]);
         break;
       case 12:
-        c1 = C_TEMP;
+        fprintf_P(&lcd_out, PSTR("Computer:  "));
         if(states[COMPUTER_TEMP] > states[PREV_COMPUTER_TEMP])
-          c1 = C_UP;
+          fprintf_P(&lcd_out, PSTR("%c "), C_UP);
         else if(states[COMPUTER_TEMP] < states[PREV_COMPUTER_TEMP])
-          c1 = C_DOWN;
-        fprintf_P(&lcd_out, PSTR("Computer:  %c %2d%c"),
-          C_TEMP, states[COMPUTER_TEMP], C_CELCIUM);
+          fprintf_P(&lcd_out, PSTR("%c "), C_DOWN);
+        else
+          fprintf_P(&lcd_out, PSTR("%c "), C_TEMP);
+        fprintf_P(&lcd_out, PSTR("%2d%c"), states[COMPUTER_TEMP], C_CELCIUM);
         break;
     }
     homeScreenItem++;
