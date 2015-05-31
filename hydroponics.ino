@@ -511,6 +511,12 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
   if(_mistingMinute != 0 && 
       millis()/ONE_SEC > lastMisting + (_mistingMinute * secPerMin)) {
     startMisting = settings.mistingDuration;
+    // update sensors history
+    states[PREV_AIR_TEMP] = states[AIR_TEMP];
+    states[PREV_HUMIDITY] = states[HUMIDITY];
+    states[PREV_SUBSTRATE_TEMP] = states[SUBSTRATE_TEMP];
+    states[PREV_LIGHT] = states[LIGHT];
+    states[PREV_COMPUTER_TEMP] = states[COMPUTER_TEMP];
   }
 }
 

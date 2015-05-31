@@ -50,7 +50,7 @@ RTC_DS1307 rtc;
 DateTime clock;
 
 // Declare state map
-SimpleMap<uint8_t, uint16_t, 10> states;
+SimpleMap<uint8_t, uint16_t, 15> states;
 
 // Define custom LCD characters
 static const uint8_t C_CELCIUM = 0;
@@ -59,6 +59,8 @@ static const uint8_t C_HUMIDITY = 2;
 static const uint8_t C_TEMP = 3;
 static const uint8_t C_FLOWER = 4;
 static const uint8_t C_LAMP = 5;
+static const uint8_t C_UP = 6;
+static const uint8_t C_DOWN = 7;
 // Define LCD menu items
 static const uint8_t HOME = 0;
 static const uint8_t WATERING_DURATION = 1;
@@ -94,16 +96,21 @@ static const uint8_t ERROR_DS18B20 = 14;
 static const uint8_t ERROR_NO_SUBSTRATE = 15;
 static const uint8_t ERROR_CLOCK = 16;
 // Define state map keys constants
-static const uint8_t HUMIDITY = 2; // air humidity
-static const uint8_t AIR_TEMP = 3;
-static const uint8_t COMPUTER_TEMP = 4; // temperature inside
-static const uint8_t SUBSTRATE_TEMP = 5;
-static const uint8_t LIGHT = 6; // light intensivity
-static const uint8_t PUMP_MISTING = 7;
-static const uint8_t PUMP_WATERING = 8;
-static const uint8_t LAMP = 9;
-static const uint8_t WARNING = 10;
-static const uint8_t ERROR = 11;
+static const uint8_t HUMIDITY = 1; // air humidity
+static const uint8_t AIR_TEMP = 2;
+static const uint8_t COMPUTER_TEMP = 3; // temperature inside
+static const uint8_t SUBSTRATE_TEMP = 4;
+static const uint8_t LIGHT = 5; // light intensivity
+static const uint8_t PUMP_MISTING = 6;
+static const uint8_t PUMP_WATERING = 7;
+static const uint8_t LAMP = 8;
+static const uint8_t WARNING = 9;
+static const uint8_t ERROR = 10;
+static const uint8_t PREV_HUMIDITY = 11;
+static const uint8_t PREV_AIR_TEMP = 12;
+static const uint8_t PREV_COMPUTER_TEMP = 13;
+static const uint8_t PREV_SUBSTRATE_TEMP = 14;
+static const uint8_t PREV_LIGHT = 15;
 // Define constants
 static const uint8_t ENHANCED_MODE = 2; // edit mode
 static const uint16_t TEST_ENABLE = 20000;
@@ -134,6 +141,8 @@ public:
     lcd.createChar(C_TEMP, settings.c_temp);
     //lcd.createChar(C_FLOWER, settings.c_flower);
     lcd.createChar(C_LAMP, settings.c_lamp);
+    lcd.createChar(C_UP, settings.c_up);
+    lcd.createChar(C_DOWN, settings.c_down);
   }
 
   void update() {
@@ -451,23 +460,49 @@ private:
     fprintf_P(&lcd_out, PSTR("           %02d{:}%02d\n"), 
       clock.hour(), clock.minute());
 
+    uint8_t c1, c2;
     if(homeScreenItem >= 16)
       homeScreenItem = 0;
     switch (homeScreenItem) {
       case 0:
+        c1 = C_TEMP;
+        c2 = C_HUMIDITY;
+        if(states[AIR_TEMP] > states[PREV_AIR_TEMP])
+          c1 = C_UP;
+        else if(states[AIR_TEMP] < states[PREV_AIR_TEMP])
+          c1 = C_DOWN;
+        if(states[HUMIDITY] > states[PREV_HUMIDITY])
+          c2 = C_UP;
+        else if(states[HUMIDITY] < states[PREV_HUMIDITY])
+          c2 = C_DOWN;
         fprintf_P(&lcd_out, PSTR("Air: %c %2d%c %c %2d%%"),
-          C_TEMP, states[AIR_TEMP], C_CELCIUM, C_HUMIDITY, 
-          states[HUMIDITY]);
+          C_TEMP, states[AIR_TEMP], C_CELCIUM, 
+          C_HUMIDITY, states[HUMIDITY]);
         break;
       case 4:
+        c1 = C_TEMP;
+        if(states[SUBSTRATE_TEMP] > states[PREV_SUBSTRATE_TEMP])
+          c1 = C_UP;
+        else if(states[SUBSTRATE_TEMP] < states[PREV_SUBSTRATE_TEMP])
+          c1 = C_DOWN;
         fprintf_P(&lcd_out, PSTR("Substrate: %c %2d%c"),
           C_TEMP, states[SUBSTRATE_TEMP], C_CELCIUM);
         break;
       case 8:
+        c1 = C_LAMP;
+        if(states[LIGHT] > states[PREV_LIGHT])
+          c1 = C_UP;
+        else if(states[LIGHT] < states[PREV_LIGHT])
+          c1 = C_DOWN;
         fprintf_P(&lcd_out, PSTR("Light: %c %4dlux"),
           C_LAMP, states[LIGHT]);
         break;
       case 12:
+        c1 = C_TEMP;
+        if(states[COMPUTER_TEMP] > states[PREV_COMPUTER_TEMP])
+          c1 = C_UP;
+        else if(states[COMPUTER_TEMP] < states[PREV_COMPUTER_TEMP])
+          c1 = C_DOWN;
         fprintf_P(&lcd_out, PSTR("Computer:  %c %2d%c"),
           C_TEMP, states[COMPUTER_TEMP], C_CELCIUM);
         break;
