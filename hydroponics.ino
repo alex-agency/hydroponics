@@ -44,10 +44,10 @@ LcdPanel panel;
 #define DHTTYPE DHT11
 
 // Declare variables
-unsigned long timerSec, timer100sec, timerMin, lastMisting, lastWatering;
+unsigned long timerSec, timer100sec, timerMin; 
+unsigned long lastMisting, lastWatering, startWatering;
 uint16_t sunrise;
 uint8_t startMisting;
-unsigned long startWatering;
 bool substTankFull;
 
 // Define pins
@@ -111,7 +111,7 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  if(millis() - timerSec >= MILLIS_TO_SEC) {
+  if(millis() - timerSec >= ONE_SEC) {
     timerSec = millis();
     // check level sensors
     check_levels();
@@ -120,7 +120,7 @@ void loop()
     // update misting
     misting();
     // timer for 1 min
-    if(timerSec - timerMin >= 60*MILLIS_TO_SEC) {
+    if(timerSec - timerMin >= ONE_MIN) {
       timerMin = timerSec;
       // manage light
       doLight();
@@ -164,7 +164,7 @@ void loop()
       #endif
     }
     // timer for 100 sec
-    if(timerSec - timer100sec >= 100*MILLIS_TO_SEC) {
+    if(timerSec - timer100sec >= 100*ONE_SEC) {
       timer100sec = timerSec;
       // system check
       checkSystem();
@@ -302,7 +302,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/MILLIS_TO_SEC > lastWatering + 65)
+    if(millis()/ONE_SEC > lastWatering + 70)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -497,9 +497,9 @@ bool isNight() {
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
-  if(_wateringMinute != 0 && millis()/MILLIS_TO_SEC > 
-      lastWatering + (_wateringMinute * 60)) {
-    startWatering = millis()/MILLIS_TO_SEC;
+  if(_wateringMinute != 0 && 
+      millis()/ONE_SEC > lastWatering + (_wateringMinute * 60)) {
+    startWatering = millis()/ONE_SEC;
   }
   uint8_t secPerMin = 60;
   // check humidity
@@ -508,8 +508,8 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
   } else if(states[HUMIDITY] >= settings.humidMaximum) {
     secPerMin *= 2; // twice rarely, on minute = 120 sec
   }
-  if(_mistingMinute != 0 && millis()/MILLIS_TO_SEC > 
-      lastMisting + (_mistingMinute * secPerMin)) {
+  if(_mistingMinute != 0 && 
+      millis()/ONE_SEC > lastMisting + (_mistingMinute * secPerMin)) {
     startMisting = settings.mistingDuration;
   }
 }
@@ -597,7 +597,7 @@ void misting() {
     return;
   }
   startMisting--;
-  lastMisting = millis()/MILLIS_TO_SEC;
+  lastMisting = millis()/ONE_SEC;
   relayOn(PUMP_MISTING);
 }
 
@@ -621,7 +621,7 @@ void watering() {
   if(states[WARNING] == WARNING_SUBSTRATE_LOW)
     pauseDuration = 21; // max officient pause
   // pause every 30 sec
-  if((millis()/MILLIS_TO_SEC-startWatering) % 30 <= pauseDuration) {
+  if((millis()/ONE_SEC-startWatering) % 30 <= pauseDuration) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Pause for clean up.\n\r"));
     #endif
@@ -629,7 +629,7 @@ void watering() {
     return;
   }
   // time is over
-  if(startWatering + (settings.wateringDuration*60) <= millis()/MILLIS_TO_SEC) {
+  if(startWatering + (settings.wateringDuration*60) <= millis()/ONE_SEC) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
     #endif
@@ -649,6 +649,6 @@ void watering() {
     states[WARNING] = WARNING_WATERING;
     return;
   }
-  lastWatering = millis()/MILLIS_TO_SEC;
+  lastWatering = millis()/ONE_SEC;
   relayOn(PUMP_WATERING);
 }

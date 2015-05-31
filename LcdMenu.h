@@ -108,12 +108,10 @@ static const uint8_t ERROR = 11;
 static const uint8_t ENHANCED_MODE = 2; // edit mode
 static const uint16_t TEST_ENABLE = 20000;
 static const bool ONE_BLINK = 1;
-static const uint16_t MILLIS_TO_SEC = 1000;
-static const bool ONE_SEC = 1;
-static const uint8_t TEN_SEC = 10;
-static const uint8_t HALF_MIN = 30;
-static const uint8_t SEC_TO_MIN = 60;
-static const uint16_t FIVE_MIN = 300;
+static const uint16_t ONE_SEC = 1000;
+static const uint16_t TEN_SEC = 10*ONE_SEC;
+static const uint16_t HALF_MIN = 30*ONE_SEC;
+static const uint16_t ONE_MIN = 60*ONE_SEC;
 
 class LcdMenu
 {
@@ -140,13 +138,15 @@ public:
 
   void update() {
     // timer for 1 sec
-    if(millis()/MILLIS_TO_SEC - lastUpdate >= ONE_SEC) {
-      lastUpdate = millis()/MILLIS_TO_SEC;
+    if(millis() - lastUpdate >= 1000) {
+      lastUpdate = millis();
       // keep home screen and sleeping
       keepDefault();
       // update clock      
       if(editMode == false)
         clock = rtc.now();
+      else
+        lastUpdate -= 500; // twice faster
       // update lcd
       show();
     }
@@ -169,7 +169,7 @@ public:
       editMode = false;
     }
     // 5 min after touch
-    if(lcd.isBacklight() && lastTouch+FIVE_MIN < lastUpdate) {
+    if(lcd.isBacklight() && lastTouch+(5*ONE_MIN) < lastUpdate) {
       // switch off backlight
       lcd.setBacklight(false);
     }
@@ -178,7 +178,7 @@ public:
   void show() {
     // check button click
     if(nextItem != false) {
-      lastTouch = millis()/MILLIS_TO_SEC;
+      lastTouch = millis();
       beep.play(ONE_BEEP);
       // enable backlight
       if(lcd.isBacklight() == false) {
@@ -323,12 +323,12 @@ public:
         fprintf_P(&lcd_out, PSTR("Light day from  \n"));
         if(editMode == false) {
           fprintf_P(&lcd_out, PSTR("%02d:%02d to %02d:%02d  "), 
-            settings.lightDayStart/SEC_TO_MIN, settings.lightDayStart%SEC_TO_MIN,
-            (settings.lightDayStart/SEC_TO_MIN)+settings.lightDayDuration, 
-            settings.lightDayStart%SEC_TO_MIN);
+            settings.lightDayStart/60, settings.lightDayStart%60,
+            (settings.lightDayStart/60)+settings.lightDayDuration, 
+            settings.lightDayStart%60);
         } else {
           fprintf_P(&lcd_out, PSTR("{%2d} o'clock      "), 
-            (settings.lightDayStart += (nextItem*SEC_TO_MIN))/SEC_TO_MIN);
+            (settings.lightDayStart += (nextItem*60))/60);
         }
         break;
 
