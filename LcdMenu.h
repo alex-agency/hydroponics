@@ -118,7 +118,6 @@ static const uint8_t ENHANCED_MODE = 2; // edit mode
 static const uint16_t TEST_ENABLE = 20000;
 static const bool ONE_BLINK = 1;
 static const uint16_t ONE_SEC = 1000;
-static const uint16_t TEN_SEC = 10*ONE_SEC;
 static const uint16_t HALF_MIN = 30*ONE_SEC;
 static const uint16_t ONE_MIN = 60*ONE_SEC;
 
@@ -211,28 +210,26 @@ public:
       blinkPos = false;
       editMode = false;
     }
-    if(menuItem != HOME || 
-        states[WARNING] != NO_WARNING ||
-        states[ERROR] != NO_ERROR) {
-      // reset home screen
-      homeScreenItem = 0;  
-    }
     // error screen
     if(states[ERROR] != NO_ERROR && 
-        lastTouch+TEN_SEC <= lastUpdate) {
+        lastTouch+HALF_MIN <= lastUpdate) {
       showAlert();
+      homeScreenItem = 0;
       return;
     }
     // warning screen
     if(states[WARNING] != NO_WARNING && 
-        lastTouch+TEN_SEC <= lastUpdate) {
+        lastTouch+HALF_MIN <= lastUpdate) {
       showWarning();
+      homeScreenItem = 0;
       return;
     }
     // main screen
     if(menuItem == HOME) {
       homeScreen();
       return;
+    } else {
+      homeScreenItem = 0;
     }
     // menu screen
     showMenu();
@@ -459,20 +456,19 @@ private:
   void homeScreen() {
     textBlink = true;
     lcd.home();
-
-    if(states[MISTING] != 0 && states[MISTING] < states[WATERING]) {
-      fprintf_P(&lcd_out, PSTR("{%c}%3d min  "), C_FLOWER, states[MISTING]);
-    } 
-    else if(states[WATERING] != 0 && states[WATERING] < states[MISTING]) {
-      fprintf_P(&lcd_out, PSTR("{%c}%3d min  "), C_HEART, states[WATERING]);
-    } 
-    else {
-      fprintf_P(&lcd_out, PSTR("Sleeping  "));
-    }
-    fprintf_P(&lcd_out, PSTR(" %02d{:}%02d\n"), clock.hour(), clock.minute());
-
     if(homeScreenItem >= 16)
       homeScreenItem = 0;
+    
+    if(states[MISTING] == 0 && states[WATERING] == 0)
+      fprintf_P(&lcd_out, PSTR("Sleeping  "));
+    else if(homeScreenItem < 6) 
+      fprintf_P(&lcd_out, PSTR("%c%3d min  "), C_HEART, states[WATERING]);
+    else if(8 <= homeScreenItem && homeScreenItem < 14)
+      fprintf_P(&lcd_out, PSTR("%c%3d min  "), C_FLOWER, states[MISTING]);  
+    else
+      fprintf_P(&lcd_out, PSTR("          "));
+
+    fprintf_P(&lcd_out, PSTR(" %02d{:}%02d\n"), clock.hour(), clock.minute());
     switch (homeScreenItem) {
       case 0:
         fprintf_P(&lcd_out, PSTR("Air: "));
