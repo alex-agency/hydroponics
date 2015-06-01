@@ -461,10 +461,10 @@ private:
     lcd.home();
 
     if(states[MISTING] != 0 && states[MISTING] < states[WATERING]) {
-      fprintf_P(&lcd_out, PSTR("%c %03d min "), C_FLOWER, states[MISTING]);
+      fprintf_P(&lcd_out, PSTR("{%c}%3d min  "), C_FLOWER, states[MISTING]);
     } 
     else if(states[WATERING] != 0 && states[WATERING] < states[MISTING]) {
-      fprintf_P(&lcd_out, PSTR("%c %03d min "), C_HEART, states[WATERING]);
+      fprintf_P(&lcd_out, PSTR("{%c}%3d min  "), C_HEART, states[WATERING]);
     } 
     else {
       fprintf_P(&lcd_out, PSTR("Sleeping  "));
