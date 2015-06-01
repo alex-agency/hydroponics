@@ -195,8 +195,6 @@ public:
         lcd.setBacklight(true);
         // reset click
         nextItem = false;
-        // reset home screen
-      	homeScreenItem = 0;  
         return;
       }
     }
@@ -229,6 +227,7 @@ public:
       homeScreen();
       return;
     } else {
+      // reset home screen
       homeScreenItem = 0;
     }
     // menu screen
@@ -461,9 +460,9 @@ private:
     
     if(states[MISTING] == 0 && states[WATERING] == 0)
       fprintf_P(&lcd_out, PSTR("Sleeping  "));
-    else if(homeScreenItem < 6) 
+    else if(1 <= homeScreenItem && homeScreenItem < 7) 
       fprintf_P(&lcd_out, PSTR("%c%3d min  "), C_HEART, states[WATERING]);
-    else if(8 <= homeScreenItem && homeScreenItem < 14)
+    else if(9 <= homeScreenItem && homeScreenItem < 15)
       fprintf_P(&lcd_out, PSTR("%c%3d min  "), C_FLOWER, states[MISTING]);  
     else
       fprintf_P(&lcd_out, PSTR("          "));

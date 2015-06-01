@@ -16,7 +16,7 @@
   #include "MeshNet.h"
 #endif
 
-//#define DEBUG
+#define DEBUG
 
 // Declare output
 static int serial_putchar(char c, FILE *) {
@@ -111,7 +111,7 @@ void loop()
   // watchdog
   heartbeat();
   // timer fo 1 sec
-  if(millis() - timerSec >= 1) {
+  if(millis()/ONE_SEC - timerSec >= 1) {
     timerSec = millis()/ONE_SEC;
     // check level sensors
     check_levels();
@@ -165,12 +165,12 @@ void loop()
     }
     // timer for 100 sec
     if(timerSec - timer100sec >= 100) {
-      timer100sec = timerSec;
+      timer100sec = millis()/ONE_SEC;
       // system check
       checkSystem();
       #ifdef DEBUG
-        printf_P(PSTR("Loop: Info: System check takes: %dms\n\r"),
-          millis()/ONE_SEC-timer100sec);
+        printf_P(PSTR("Loop: Info: System check takes: %d ms\n\r"),
+          millis()-timer100sec*ONE_SEC);
       #endif
     }
   }
@@ -302,7 +302,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/ONE_SEC > lastWatering + 70)
+    if(millis()/ONE_SEC > lastWatering + 150)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -516,7 +516,7 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
       nextMisting);
   #endif
 
-  if(_wateringMinute != 0 && nextWatering <= 0) {
+  if(_wateringMinute != 0 && nextWatering <= 60) {
     startWatering = millis()/ONE_SEC;
     // update sensors history
     states[PREV_AIR_TEMP] = states[AIR_TEMP];
@@ -526,16 +526,16 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
     states[PREV_COMPUTER_TEMP] = states[COMPUTER_TEMP];
   }
 
-  if(_mistingMinute != 0 && nextMisting <= 0) {
+  if(_mistingMinute != 0 && nextMisting <= 60) {
     startMisting = settings.mistingDuration;
   }
 
-  if(nextWatering > 0)
-    states[WATERING] = nextWatering / 60;
+  if(nextWatering > 60)
+    states[WATERING] = nextWatering/60;
   else
     states[WATERING] = 0;
-  if(nextMisting > 0)
-    states[MISTING] = nextMisting / 60;
+  if(nextMisting > 60)
+    states[MISTING] = nextMisting/60;
   else
     states[MISTING] = 0;
 }
@@ -553,14 +553,15 @@ void doLight() {
     relayOn(LAMP);
     return;
   }
-  uint16_t dtime = clock.hour()*60+clock.minute();
   // light enough
   if(states[LIGHT] > settings.lightMinimum) {
     // turn off lamp
     relayOff(LAMP);
+    return;
   }
+  uint16_t dtime = clock.hour()*60+clock.minute();
   // set sunrise
-  if(states[LIGHT] > 500) {
+  if(states[LIGHT] > 500 && states[LIGHT] <= settings.lightMinimum) {
     bool morning = 4 < clock.hour() && clock.hour() <= 8;
     // save sunrise time
     if(morning && sunrise == 0) {
