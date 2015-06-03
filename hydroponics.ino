@@ -497,26 +497,16 @@ bool isNight() {
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
-  uint8_t secPerMin = 60;
-  unsigned long nextWatering = 
-    _wateringMinute * secPerMin - (millis()/ONE_SEC-lastWatering);
+  unsigned long diffMin = (millis()/ONE_SEC-lastWatering)/60%60;
+  diffMin = _wateringMinute-diffMin;
+  if(diffMin > 0)
+    states[WATERING] = diffMin;
+  else
+    states[WATERING] = 0;
   #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Watering after: %d sec.\n\r"), 
-      nextWatering);
+    printf_P(PSTR("Work: Info: Watering after: %d min.\n\r"), diffMin);
   #endif
-  // check humidity
-  if(states[HUMIDITY] <= settings.humidMinimum)
-    secPerMin /= 2; // twice often, one minute = 30 sec
-  else if(states[HUMIDITY] >= settings.humidMaximum)
-    secPerMin *= 2; // twice rarely, on minute = 120 sec
-  unsigned long nextMisting = 
-    _mistingMinute * secPerMin - (millis()/ONE_SEC-lastMisting);
-  #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Misting after: %d sec.\n\r"), 
-      nextMisting);
-  #endif
-
-  if(_wateringMinute != 0 && nextWatering <= 60) {
+  if(_wateringMinute != 0 && diffMin <= 0) {
     startWatering = millis()/ONE_SEC;
     // update sensors history
     states[PREV_AIR_TEMP] = states[AIR_TEMP];
@@ -526,18 +516,23 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
     states[PREV_COMPUTER_TEMP] = states[COMPUTER_TEMP];
   }
 
-  if(_mistingMinute != 0 && nextMisting <= 60) {
-    startMisting = settings.mistingDuration;
-  }
-
-  if(nextWatering > 60)
-    states[WATERING] = nextWatering/60;
-  else
-    states[WATERING] = 0;
-  if(nextMisting > 60)
-    states[MISTING] = nextMisting/60;
+  // check humidity
+  if(states[HUMIDITY] <= settings.humidMinimum)
+    _mistingMinute /= 2; // twice often
+  else if(states[HUMIDITY] >= settings.humidMaximum)
+    _mistingMinute *= 2; // twice rarely
+  diffMin = (millis()/ONE_SEC-lastMisting)/60%60;
+  diffMin = _mistingMinute-diffMin;
+  if(diffMin > 0)
+    states[MISTING] = diffMin;
   else
     states[MISTING] = 0;
+  #ifdef DEBUG
+    printf_P(PSTR("Work: Info: Misting after: %d sec.\n\r"), diffMin);
+  #endif
+  if(_mistingMinute != 0 && diffMin <= 0) {
+    startMisting = settings.mistingDuration;
+  }
 }
 
 void doLight() { 
