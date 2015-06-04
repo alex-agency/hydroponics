@@ -470,6 +470,8 @@ void doWork() {
     #ifdef DEBUG
       printf_P(PSTR("Work: Info: Night time.\n\r"));
     #endif
+    states[WATERING] = 0;
+    states[MISTING] = 0;
     // nothing, silent night
     return;
   }
@@ -528,7 +530,7 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
   else
     states[MISTING] = 0;
   #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Misting after: %d sec.\n\r"), diffMin);
+    printf_P(PSTR("Work: Info: Misting after: %d min.\n\r"), diffMin);
   #endif
   if(_mistingMinute != 0 && diffMin <= 0) {
     startMisting = settings.mistingDuration;
