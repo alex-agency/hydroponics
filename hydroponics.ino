@@ -169,7 +169,7 @@ void loop()
       // system check
       checkSystem();
       #ifdef DEBUG
-        printf_P(PSTR("Loop: Info: System check takes: %d ms\n\r"),
+        printf_P(PSTR("Loop: Info: System check takes: %u ms\n\r"),
           millis()-timer100sec*ONE_SEC);
       #endif
     }
@@ -499,16 +499,20 @@ bool isNight() {
 }
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
-  unsigned long diffMin = (millis()/ONE_SEC-lastWatering)/60%60;
-  diffMin = _wateringMinute-diffMin;
-  if(diffMin > 0)
-    states[WATERING] = diffMin;
-  else
-    states[WATERING] = 0;
+  // watering
+  unsigned long diffMin = millis()/ONE_SEC;
+  diffMin = diffMin-lastWatering;
+  diffMin = diffMin/60%60;
+  if(_wateringMinute > diffMin) {
+    diffMin = _wateringMinute-diffMin;
+  } else {
+    diffMin = 0;
+  }
+  states[WATERING] = diffMin;
   #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Watering after: %d min.\n\r"), diffMin);
+    printf_P(PSTR("Work: Info: Watering after: %u min.\n\r"), diffMin);
   #endif
-  if(_wateringMinute != 0 && diffMin <= 0) {
+  if(_wateringMinute != 0 && diffMin == 0) {
     startWatering = millis()/ONE_SEC;
     // update sensors history
     states[PREV_AIR_TEMP] = states[AIR_TEMP];
@@ -523,16 +527,21 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
     _mistingMinute /= 2; // twice often
   else if(states[HUMIDITY] >= settings.humidMaximum)
     _mistingMinute *= 2; // twice rarely
-  diffMin = (millis()/ONE_SEC-lastMisting)/60%60;
-  diffMin = _mistingMinute-diffMin;
-  if(diffMin > 0)
-    states[MISTING] = diffMin;
-  else
-    states[MISTING] = 0;
+
+  // misting
+  diffMin = millis()/ONE_SEC;
+  diffMin = diffMin-lastMisting;
+  diffMin = diffMin/60%60;
+  if(_mistingMinute > diffMin) {
+    diffMin = _mistingMinute-diffMin;
+  } else {
+    diffMin = 0;
+  }
+  states[MISTING] = diffMin;
   #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Misting after: %d min.\n\r"), diffMin);
+    printf_P(PSTR("Work: Info: Misting after: %u min.\n\r"), diffMin);
   #endif
-  if(_mistingMinute != 0 && diffMin <= 0) {
+  if(_mistingMinute != 0 && diffMin == 0) {
     startMisting = settings.mistingDuration;
   }
 }
