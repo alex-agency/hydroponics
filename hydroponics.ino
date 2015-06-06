@@ -500,19 +500,16 @@ bool isNight() {
 
 void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
   // watering
-  unsigned long diffMin = millis()/ONE_SEC;
-  diffMin = diffMin-lastWatering;
-  diffMin = diffMin/60%60;
-  if(_wateringMinute > diffMin) {
-    diffMin = _wateringMinute-diffMin;
-  } else {
-    diffMin = 0;
-  }
-  states[WATERING] = diffMin;
+  unsigned long diff = (millis()/ONE_SEC-lastWatering)/60;
+  if(_wateringMinute > diff)
+    diff = _wateringMinute-diff;
+  else
+    diff = 0;
+  states[WATERING] = diff;
   #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Watering after: %u min.\n\r"), diffMin);
+    printf_P(PSTR("Work: Info: Watering after: %u min.\n\r"), diff);
   #endif
-  if(_wateringMinute != 0 && diffMin == 0) {
+  if(_wateringMinute != 0 && diff == 0) {
     startWatering = millis()/ONE_SEC;
     // update sensors history
     states[PREV_AIR_TEMP] = states[AIR_TEMP];
@@ -529,19 +526,16 @@ void checkTimer(uint8_t _wateringMinute, uint8_t _mistingMinute) {
     _mistingMinute *= 2; // twice rarely
 
   // misting
-  diffMin = millis()/ONE_SEC;
-  diffMin = diffMin-lastMisting;
-  diffMin = diffMin/60%60;
-  if(_mistingMinute > diffMin) {
-    diffMin = _mistingMinute-diffMin;
-  } else {
-    diffMin = 0;
-  }
-  states[MISTING] = diffMin;
+  diff = (millis()/ONE_SEC-lastMisting)/60;
+  if(_mistingMinute > diff)
+    diff = _mistingMinute-diff;
+  else
+    diff = 0;
+  states[MISTING] = diff;
   #ifdef DEBUG
-    printf_P(PSTR("Work: Info: Misting after: %u min.\n\r"), diffMin);
+    printf_P(PSTR("Work: Info: Misting after: %u min.\n\r"), diff);
   #endif
-  if(_mistingMinute != 0 && diffMin == 0) {
+  if(_mistingMinute != 0 && diff == 0) {
     startMisting = settings.mistingDuration;
   }
 }
