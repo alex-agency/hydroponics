@@ -663,7 +663,7 @@ void watering() {
     return;
   }
   // time is over
-  if(startWatering + (settings.wateringDuration*60) <= millis()/ONE_SEC) {
+  if(millis()/ONE_SEC-startWatering >= settings.wateringDuration*60) {
     #ifdef DEBUG
       printf_P(PSTR("Watering: Info: Stop watering.\n\r"));
     #endif

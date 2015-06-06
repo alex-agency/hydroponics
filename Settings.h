@@ -11,7 +11,7 @@ static const uint8_t EEPROM_SIZE = 255;
 // prevent burn memory
 static const uint8_t MAX_WRITES = 20;
 // Declare EEPROM values
-#define SETTINGS_ID  "@"
+#define SETTINGS_ID  "$"
 // Declare structure and default settings
 struct SettingsStruct {
   uint8_t wateringDuration, wateringSunnyPeriod, wateringPeriod;
@@ -19,24 +19,24 @@ struct SettingsStruct {
   uint16_t lightMinimum, lightDayStart; uint8_t lightDayDuration;
   uint8_t humidMinimum, humidMaximum; 
   uint8_t airTempMinimum, airTempMaximum, subsTempMinimum;
-  uint8_t silentEvening, silentMorning;
+  uint8_t silentEvening, silentMorning, emergenceDuration;
   char id[2];
   uint8_t c_celcium[8], c_heart[8], c_humidity[8];
   uint8_t c_temp[8], c_flower[8], c_lamp[8];
   uint8_t c_up[8], c_down[8];
 } settings = {
-  15, 80, 100,
+  15, 60, 90,
   3, 120, 60,
   1000, 360, 14,
   45, 75,
   18, 30, 16,
-  22, 8,
+  23, 7, 30,
   SETTINGS_ID,
-  {24, 24, 3, 4, 4, 4, 3, 0}, {0, 10, 21, 17, 10, 4, 0, 0}, 
+  {24, 24, 3, 4, 4, 4, 3, 0}, {0, 10, 31, 31, 14, 4, 0, 0}, 
   {4, 10, 10, 17, 17, 17, 14, 0}, {4, 10, 10, 14, 31, 31, 14, 0},
   {14, 27, 21, 14, 4, 12, 4, 0}, {14, 17, 17, 17, 14, 14, 4, 0},
   {4, 14, 21, 4, 4, 4, 4, 0}, {4, 4, 4, 4, 21, 14, 4, 0}
-}, test;
+}, backup;
 
 
 class EEPROM 

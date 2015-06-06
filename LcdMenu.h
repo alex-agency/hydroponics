@@ -73,7 +73,7 @@ static const uint8_t HUMIDITY_RANGE = 7;
 static const uint8_t AIR_TEMP_RANGE = 8;
 static const uint8_t SUBSTRATE_TEMP_MINIMUM = 9;
 static const uint8_t SILENT_NIGHT = 10;
-static const uint8_t TEST = 11;
+static const uint8_t EMERGENCE = 11;
 static const uint8_t CLOCK = 12;
 // Define warning states
 static const uint8_t NO_WARNING = 0;
@@ -115,7 +115,6 @@ static const uint8_t WATERING = 16;
 static const uint8_t MISTING = 17;
 // Define constants
 static const uint8_t ENHANCED_MODE = 2; // edit mode
-static const uint16_t TEST_ENABLE = 20000;
 static const bool ONE_BLINK = 1;
 static const uint16_t ONE_SEC = 1000;
 static const uint16_t HALF_MIN = 30*ONE_SEC;
@@ -148,7 +147,7 @@ public:
 
   void update() {
     // timer for 1 sec
-    if(millis() - lastUpdate >= 1000) {
+    if(millis() - lastUpdate >= ONE_SEC) {
       lastUpdate = millis();
       // keep home screen and sleeping
       keepDefault();
@@ -170,7 +169,7 @@ public:
 
   void keepDefault() {
     // less 30 sec after touch
-    if(lastTouch+HALF_MIN > lastUpdate || menuItem == TEST) {
+    if(lastTouch+HALF_MIN > lastUpdate || menuItem == EMERGENCE) {
       return;
     }
     // return to home
@@ -385,45 +384,69 @@ public:
           case 4:
             blinkPos = 1;
             settings.silentEvening += nextItem;
+            if(settings.silentEvening > 23)
+              settings.silentEvening = 17;
+            else if(settings.silentEvening < 17)
+              settings.silentEvening = 23;
             break;
           case 3:
             blinkPos = 2;
             settings.silentMorning += nextItem;
+            if(settings.silentMorning > 12)
+              settings.silentMorning = 5;
+            else if(settings.silentMorning < 5)
+              settings.silentMorning = 12;
             break;
         }
         fprintf_P(&lcd_out, PSTR("Silent night    \nfrom {%2d}h to {%2d}h "),
           settings.silentEvening, settings.silentMorning);
         break;
 
-      case TEST:
+      case EMERGENCE:
         textBlink = true;
-        if(editMode == false) {
-          fprintf_P(&lcd_out, PSTR("Test all systems\n       -> {Start?}"));
-          // disable test mode
-          if(settings.lightMinimum == TEST_ENABLE) {   
-            // restore previous settings
-            settings = test;
-          }
-        } else {
-          fprintf_P(&lcd_out, PSTR("Testing.....    \n        -> {Stop?}"));
-          storage.changed = false;
-          // enable test mode
-          if(settings.lightMinimum != TEST_ENABLE) {
-            // save previous settings
-            test = settings;
-            // change settings for test
-            settings.lightMinimum = TEST_ENABLE;
-            settings.lightDayDuration = 18; //hours
-            settings.mistingSunnyPeriod = 1; // min
-            settings.mistingPeriod = 1; //min
-            settings.wateringSunnyPeriod = 2; // min
-            settings.wateringPeriod = 2; //min
-            settings.silentMorning = 0; // hour
-            settings.silentEvening = 24; // hour
-
-            settings.wateringDuration = 4; //min
-            settings.mistingDuration = 8; //sec
-          }
+        switch (editMode) {
+          case false:
+            fprintf_P(&lcd_out, PSTR("Plant emergence \n       -> {Start?}"));
+            // disable emergence mode
+            if(emergenceTimer != false) {   
+              // restore previous settings
+              settings = backup;
+              emergenceTimer = false;
+            }
+            break;
+          case true:
+            editMode = 4;
+          case 4:
+            fprintf_P(&lcd_out, PSTR("Plant emergence \nduration {%3d} min"),
+              settings.emergenceDuration += nextItem);
+            break;
+          case 3:
+            // disable EEPROM store
+            storage.changed = false;
+            // enable emergence mode
+            if(emergenceTimer == false) {
+              // enable timer
+              emergenceTimer = millis()/ONE_MIN;  
+              // save previous settings
+              backup = settings;
+              // change settings for push emergence mode
+              settings.lightMinimum = 20000; // lux
+              settings.lightDayDuration = 18; //hours
+              settings.mistingSunnyPeriod = 5; // min
+              settings.mistingPeriod = 5; //min
+              settings.wateringSunnyPeriod = 2; // min
+              settings.wateringPeriod = 2; //min
+              settings.silentMorning = 0; // hour
+              settings.silentEvening = 24; // hour
+              settings.wateringDuration = 4; //min
+              settings.mistingDuration = 5; //sec
+            }
+            if(millis()/ONE_MIN - emergenceTimer >= settings.emergenceDuration)
+              // exit
+              editMode = false;
+            fprintf_P(&lcd_out, PSTR("Emergence.....  \n%3d min -> {Stop?}"),
+              settings.emergenceDuration - (millis()/ONE_MIN - emergenceTimer));
+            break;
         }
         break;
 
@@ -443,6 +466,7 @@ public:
 private:
   unsigned long lastTouch;
   unsigned long lastUpdate;
+  unsigned long emergenceTimer;
   uint8_t homeScreenItem;
 
   void backlightBlink(uint8_t _count) {
