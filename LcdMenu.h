@@ -169,8 +169,7 @@ public:
 
   void keepDefault() {
     // less 30 sec after touch
-    if(lastTouch+HALF_MIN > lastUpdate || 
-        (menuItem == EMERGENCE && editMode != false)) {
+    if(lastTouch+HALF_MIN > lastUpdate || menuItem == EMERGENCE) {
       return;
     }
     // return to home

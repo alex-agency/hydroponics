@@ -644,9 +644,8 @@ void watering() {
   }
   // pause for cleanup pump and rest
   uint8_t pauseDuration = 5;
-  if(states[WARNING] == INFO_SUBSTRATE_DELIVERED)
-    pauseDuration = 15;
-  if(states[WARNING] == WARNING_SUBSTRATE_LOW)
+  if(states[WARNING] == WARNING_SUBSTRATE_LOW || 
+      states[WARNING] == INFO_SUBSTRATE_DELIVERED)
     pauseDuration = 21; // max officient pause
   // pause every 30 sec
   if((millis()/ONE_SEC-startWatering) % 30 <= pauseDuration) {
