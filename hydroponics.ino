@@ -561,7 +561,7 @@ void doLight() {
   }
   uint16_t dtime = clock.hour()*60+clock.minute();
   // set sunrise
-  if(states[LIGHT] > 500 && states[LIGHT] <= settings.lightMinimum) {
+  if(states[LIGHT] > 300 && states[LIGHT] <= settings.lightMinimum) {
     bool morning = 4 < clock.hour() && clock.hour() <= 8;
     // save sunrise time
     if(morning && sunrise == 0) {
