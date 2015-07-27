@@ -41,7 +41,7 @@ LcdPanel panel;
 #endif
 
 // Declare DHT sensor
-#define DHTTYPE DHT11
+#define DHTTYPE DHT22
 
 // Declare variables
 unsigned long timerSec, timer100sec, timerMin; 
@@ -218,7 +218,8 @@ bool read_DHT() {
     #endif
     return false;
   }
-  if(states[HUMIDITY] >= 95 || states[AIR_TEMP] >= 50) {
+  if(DHTTYPE == "DHT11" && 
+      (states[HUMIDITY] >= 95 || states[AIR_TEMP] >= 50)) {
     #ifdef DEBUG_DHT
       printf_P(PSTR("DHT Sensor: Error: sensor broken!\n\r"));
     #endif
@@ -302,7 +303,7 @@ void check_levels() {
   #endif
   if(analogRead(SUBSTRATE_LEVELPIN) > 700) {
     // prevent fail alert
-    if(millis()/ONE_SEC > lastWatering + 150)
+    if(millis()/ONE_SEC > lastWatering + 140)
       states[ERROR] = ERROR_NO_SUBSTRATE;
     else
       states[WARNING] = WARNING_SUBSTRATE_LOW;
@@ -583,7 +584,6 @@ void doLight() {
       // prevent rewrite, move to out of morning
       sunrise += 300;
     }
-    return;
   }
   // reset sunrise time
   sunrise = 0;
